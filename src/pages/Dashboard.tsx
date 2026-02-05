@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Sidebar } from '@/components/Sidebar';
 import { RecipeCard } from '@/components/RecipeCard';
 import { useApp } from '@/context/AppContext';
@@ -7,9 +8,10 @@ import { Search, Sparkles } from 'lucide-react';
 export default function Dashboard() {
   const navigate = useNavigate();
   const { user, recipes } = useApp();
+  const [showAll, setShowAll] = useState(false);
 
-  // Get random recommended recipes
-  const recommendedRecipes = recipes.slice(0, 6);
+  // Get recommended recipes - show 6 initially, all when "View All" is clicked
+  const recommendedRecipes = showAll ? recipes : recipes.slice(0, 6);
 
   return (
     <div className="min-h-screen bg-background">
@@ -58,7 +60,7 @@ export default function Dashboard() {
                     Your Profile
                   </h3>
                   <p className="text-muted-foreground">
-                    {user?.diet !== 'None' ? user.diet : 'No diet restrictions'} 
+                    {user?.diet && user.diet !== 'regular' ? user.diet.replace(/_/g, ' ') : 'No diet restrictions'} 
                     {user?.allergies?.length ? ` • ${user.allergies.length} allergies` : ''}
                   </p>
                 </div>
@@ -72,9 +74,14 @@ export default function Dashboard() {
               <h2 className="font-serif text-2xl font-bold text-foreground">
                 Recommended for You
               </h2>
-              <button className="text-primary font-medium hover:underline">
-                View All
-              </button>
+              {!showAll && recipes.length > 6 && (
+                <button 
+                  onClick={() => setShowAll(true)}
+                  className="text-primary font-medium hover:underline"
+                >
+                  View All
+                </button>
+              )}
             </div>
 
             {recommendedRecipes.length > 0 ? (
