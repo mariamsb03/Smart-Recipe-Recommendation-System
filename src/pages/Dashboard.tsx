@@ -3,6 +3,7 @@ import { RecipeCard } from '@/components/RecipeCard';
 import { useApp } from '@/context/AppContext';
 import { useNavigate } from 'react-router-dom';
 import { Search, Sparkles } from 'lucide-react';
+import { useState, useEffect } from 'react';
 
 export default function Dashboard() {
   const navigate = useNavigate();
