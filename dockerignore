@@ -1,0 +1,72 @@
+# ==============================
+# Git
+# ==============================
+.git
+.gitignore
+
+# ==============================
+# Node / Frontend
+# ==============================
+node_modules
+frontend/node_modules
+
+# Build artifacts already copied from builder
+frontend/dist
+
+# ==============================
+# Python
+# ==============================
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+*.db
+*.sqlite3
+
+# Virtual environments
+.venv
+venv
+env
+
+# ==============================
+# Tests (VERY IMPORTANT)
+# ==============================
+tests
+backend/tests
+coverage
+htmlcov
+.pytest_cache
+
+# ==============================
+# Environment / Secrets
+# ==============================
+.env
+.env.*
+*.pem
+*.key
+
+# ==============================
+# ML / Data (CRITICAL)
+# ==============================
+data
+datasets
+*.csv
+*.parquet
+*.pkl
+*.joblib
+mlruns
+dvc.lock
+.dvc
+
+# ==============================
+# OS junk
+# ==============================
+.DS_Store
+Thumbs.db
+
+# ==============================
+# IDE
+# ==============================
+.vscode
+.idea
+
