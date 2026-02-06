@@ -1,0 +1,32 @@
+name: Backend Tests
+
+on: [push, pull_request]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    environment: PHASE3 
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+        
+    - name: Install dependencies
+      run: |
+        cd backend
+        pip install --upgrade pip
+        pip install -r requirements.txt
+        
+    - name: Run tests
+      env:  # Add environment variables here
+        FLASK_ENV: ${{ secrets.FLASK_ENV }}
+        FLASK_SECRET_KEY: ${{ secrets.FLASK_SECRET_KEY }}
+        SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+        SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+      run: |
+        cd backend
+        pytest tests/test_api.py -v --tb=short
