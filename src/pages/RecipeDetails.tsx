@@ -183,21 +183,8 @@ export default function RecipeDetails() {
                 <h2 className="font-serif text-xl font-bold text-foreground mb-4">
                   Directions
                 </h2>
-                <div className="space-y-4">
-                  {recipe.directions
-                    .split(/\n+/)
-                    .map((step, index) => step.trim())
-                    .filter(step => step.length > 0)
-                    .map((step, index) => (
-                      <div key={index} className="flex gap-4">
-                        <div className="flex-shrink-0 w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center font-semibold text-sm">
-                          {index + 1}
-                        </div>
-                        <p className="flex-1 text-muted-foreground leading-relaxed pt-1">
-                          {step}
-                        </p>
-                      </div>
-                    ))}
+                <div className="prose prose-sm max-w-none text-muted-foreground leading-relaxed whitespace-pre-line">
+                  {recipe.directions}
                 </div>
 
                 {recipe.url && (
