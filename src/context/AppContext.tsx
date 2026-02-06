@@ -19,56 +19,24 @@ interface AppContextType {
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
-// Parse CSV with proper handling of multi-line fields
-const parseCSV = (text: string): string[][] => {
-  const rows: string[][] = [];
-  let currentRow: string[] = [];
-  let currentField = '';
+const parseCSVLine = (line: string): string[] => {
+  const result: string[] = [];
+  let current = '';
   let inQuotes = false;
   
-  for (let i = 0; i < text.length; i++) {
-    const char = text[i];
-    const nextChar = text[i + 1];
-    
+  for (let i = 0; i < line.length; i++) {
+    const char = line[i];
     if (char === '"') {
-      if (inQuotes && nextChar === '"') {
-        // Escaped quote
-        currentField += '"';
-        i++; // Skip next quote
-      } else {
-        inQuotes = !inQuotes;
-      }
+      inQuotes = !inQuotes;
     } else if (char === ',' && !inQuotes) {
-      currentRow.push(currentField.trim());
-      currentField = '';
-    } else if ((char === '\n' || char === '\r') && !inQuotes) {
-      // End of row (but not if we're inside quotes)
-      if (currentField || currentRow.length > 0) {
-        currentRow.push(currentField.trim());
-        if (currentRow.some(f => f.length > 0)) {
-          rows.push(currentRow);
-        }
-        currentRow = [];
-        currentField = '';
-      }
-      // Skip \r\n combination
-      if (char === '\r' && nextChar === '\n') {
-        i++;
-      }
+      result.push(current.trim());
+      current = '';
     } else {
-      currentField += char;
+      current += char;
     }
   }
-  
-  // Add last field and row
-  if (currentField || currentRow.length > 0) {
-    currentRow.push(currentField.trim());
-    if (currentRow.some(f => f.length > 0)) {
-      rows.push(currentRow);
-    }
-  }
-  
-  return rows;
+  result.push(current.trim());
+  return result;
 };
 
 const parseIngredients = (ingredientsStr: string): string[] => {
@@ -97,28 +65,30 @@ export function AppProvider({ children }: { children: ReactNode }) {
     fetch('/data/recipes.csv')
       .then(res => res.text())
       .then(text => {
-        const rows = parseCSV(text);
+        const lines = text.split('\n');
         const parsedRecipes: Recipe[] = [];
         
-        // Skip header row (index 0)
-        for (let i = 1; i < Math.min(rows.length, 501); i++) {
-          const values = rows[i];
-          if (!values || values.length < 11) continue;
+        for (let i = 1; i < Math.min(lines.length, 500); i++) {
+          const line = lines[i];
+          if (!line.trim()) continue;
           
-          parsedRecipes.push({
-            id: i,
-            recipe_name: values[0] || 'Unknown Recipe',
-            ingredients_list: parseIngredients(values[1]),
-            cuisine: values[2] || 'Various',
-            cook_time_minutes: parseInt(values[3]) || 30,
-            timing: values[4] || '',
-            calories: parseInt(values[5]) || 0,
-            servings: parseInt(values[6]) || 4,
-            rating: parseFloat(values[7]) || 4.0,
-            url: values[8] || '',
-            img_src: values[9] || '',
-            directions: values[10] || '',
-          });
+          const values = parseCSVLine(line);
+          if (values.length >= 11) {
+            parsedRecipes.push({
+              id: i,
+              recipe_name: values[0] || 'Unknown Recipe',
+              ingredients_list: parseIngredients(values[1]),
+              cuisine: values[2] || 'Various',
+              cook_time_minutes: parseInt(values[3]) || 30,
+              timing: values[4] || '',
+              calories: parseInt(values[5]) || 0,
+              servings: parseInt(values[6]) || 4,
+              rating: parseFloat(values[7]) || 4.0,
+              url: values[8] || '',
+              img_src: values[9] || '',
+              directions: values[10] || '',
+            });
+          }
         }
         setRecipes(parsedRecipes);
       })
