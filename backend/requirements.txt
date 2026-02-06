@@ -9,6 +9,6 @@ pandas==2.1.4
 bcrypt==4.1.2
 pyjwt==2.8.0
 gunicorn
-
+pytest==7.4.0
 # Only specify versions that fix specific compatibility issues
 websockets>=13.0
