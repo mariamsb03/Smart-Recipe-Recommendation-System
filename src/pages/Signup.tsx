@@ -5,10 +5,21 @@ import { useApp } from '@/context/AppContext';
 import { ProgressBar } from '@/components/ProgressBar';
 import { TagInput } from '@/components/TagInput';
 
-const ALLERGIES = ['Peanuts', 'Tree Nuts', 'Milk', 'Eggs', 'Wheat', 'Soy', 'Fish', 'Shellfish', 'Sesame'];
-const DIETS = ['None', 'Vegetarian', 'Vegan', 'Pescatarian', 'Keto', 'Paleo', 'Gluten-Free', 'Dairy-Free'];
-const CONDITIONS = ['Diabetes', 'Heart Disease', 'High Blood Pressure', 'Celiac Disease', 'IBS', 'None'];
-const COMMON_DISLIKES = ['Cilantro', 'Olives', 'Mushrooms', 'Onions', 'Tomatoes', 'Garlic', 'Anchovies', 'Blue Cheese', 'Liver', 'Eggplant'];
+const ALLERGIES = ['dairy', 'eggs', 'fish', 'gluten', 'lactose', 'nuts', 'shellfish', 'soy'];
+const DIETS = ['regular', 'vegetarian', 'vegan', 'keto', 'gluten_free', 'low_carb', 'calorie_deficit', 'diabetic'];
+const CONDITIONS = ['diabetes', 'heart_disease', 'high_cholesterol', 'hypertension'];
+const COMMON_DISLIKES = [
+  // Vegetables
+  'Cilantro', 'Olives', 'Mushrooms', 'Onions', 'Tomatoes', 'Garlic', 'Eggplant', 'Bell Peppers', 'Broccoli', 'Cauliflower', 'Brussels Sprouts', 'Cabbage', 'Asparagus', 'Zucchini', 'Spinach', 'Kale',
+  // Proteins
+  'Anchovies', 'Liver', 'Organ Meats', 'Lamb', 'Pork', 'Seafood', 'Fish', 'Shellfish', 'Tofu', 'Tempeh',
+  // Dairy & Cheese
+  'Blue Cheese', 'Goat Cheese', 'Feta', 'Strong Cheese', 'Cottage Cheese',
+  // Spices & Herbs
+  'Cumin', 'Coriander', 'Fennel', 'Anise', 'Tarragon', 'Dill',
+  // Other
+  'Nuts', 'Seeds', 'Coconut', 'Raisins', 'Dates', 'Pickles', 'Capers', 'Mayonnaise', 'Mustard'
+];
 
 export default function Signup() {
   const navigate = useNavigate();
@@ -27,7 +38,7 @@ export default function Signup() {
 
   // Step 3 - Dietary
   const [allergies, setAllergies] = useState<string[]>([]);
-  const [diet, setDiet] = useState('None');
+  const [diet, setDiet] = useState('regular');
   const [conditions, setConditions] = useState<string[]>([]);
 
   // Step 4 - Dislikes
@@ -204,7 +215,6 @@ export default function Signup() {
                         <option value="">Select...</option>
                         <option value="male">Male</option>
                         <option value="female">Female</option>
-                        <option value="non-binary">Non-binary</option>
                         <option value="prefer-not-to-say">Prefer not to say</option>
                       </select>
                     </div>

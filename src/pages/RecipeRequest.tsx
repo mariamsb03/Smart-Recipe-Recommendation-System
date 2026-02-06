@@ -6,11 +6,22 @@ import { useApp } from '@/context/AppContext';
 import { Search, Clock, ChefHat, Globe } from 'lucide-react';
 
 const COMMON_INGREDIENTS = [
-  'Chicken', 'Beef', 'Pork', 'Fish', 'Shrimp', 'Tofu', 'Eggs',
-  'Rice', 'Pasta', 'Bread', 'Potatoes', 'Noodles',
-  'Tomatoes', 'Onions', 'Garlic', 'Bell Peppers', 'Carrots', 'Broccoli',
-  'Cheese', 'Milk', 'Butter', 'Cream',
-  'Olive Oil', 'Soy Sauce', 'Lemon', 'Lime'
+  // Proteins
+  'Chicken', 'Beef', 'Pork', 'Fish', 'Salmon', 'Tuna', 'Shrimp', 'Turkey', 'Lamb', 'Tofu', 'Eggs', 'Bacon', 'Sausage', 'Ground Beef', 'Chicken Breast', 'Chicken Thighs',
+  // Grains & Starches
+  'Rice', 'Pasta', 'Bread', 'Potatoes', 'Sweet Potatoes', 'Noodles', 'Quinoa', 'Couscous', 'Barley', 'Oats', 'Flour', 'Breadcrumbs', 'Tortillas',
+  // Vegetables
+  'Tomatoes', 'Onions', 'Garlic', 'Bell Peppers', 'Carrots', 'Broccoli', 'Spinach', 'Lettuce', 'Cucumber', 'Zucchini', 'Eggplant', 'Mushrooms', 'Corn', 'Peas', 'Green Beans', 'Asparagus', 'Cauliflower', 'Cabbage', 'Celery', 'Leeks', 'Shallots', 'Scallions',
+  // Fruits
+  'Apples', 'Bananas', 'Oranges', 'Lemons', 'Limes', 'Berries', 'Strawberries', 'Blueberries', 'Avocado', 'Mango', 'Pineapple',
+  // Dairy
+  'Cheese', 'Milk', 'Butter', 'Cream', 'Sour Cream', 'Yogurt', 'Cheddar', 'Mozzarella', 'Parmesan', 'Feta', 'Cream Cheese',
+  // Herbs & Spices
+  'Basil', 'Oregano', 'Thyme', 'Rosemary', 'Parsley', 'Cilantro', 'Ginger', 'Cumin', 'Paprika', 'Chili Powder', 'Black Pepper', 'Salt', 'Bay Leaves', 'Dill', 'Sage',
+  // Oils & Condiments
+  'Olive Oil', 'Vegetable Oil', 'Soy Sauce', 'Vinegar', 'Balsamic Vinegar', 'Worcestershire Sauce', 'Hot Sauce', 'Ketchup', 'Mustard', 'Mayonnaise',
+  // Pantry Staples
+  'Sugar', 'Brown Sugar', 'Honey', 'Maple Syrup', 'Vanilla Extract', 'Baking Powder', 'Baking Soda', 'Cornstarch', 'Chicken Broth', 'Beef Broth', 'Vegetable Broth', 'Coconut Milk', 'Tomato Paste', 'Tomato Sauce', 'Canned Tomatoes'
 ];
 
 const CUISINES = ['Any', 'American', 'Italian', 'Mexican', 'Chinese', 'Japanese', 'Indian', 'Mediterranean', 'Thai', 'French'];
