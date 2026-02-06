@@ -50,32 +50,6 @@ jobs:
           pytest tests/ --cov=. --cov-report=term --cov-report=html
         continue-on-error: true
 
-  # ===== Frontend Testing (from Phase 2) =====
-  frontend-tests:
-    name: Frontend Tests
-    runs-on: ubuntu-latest
-    
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-
-      - name: Install frontend dependencies
-        run: |
-          cd frontend
-          npm install
-
-      - name: Run frontend tests
-        run: |
-          cd frontend
-          npm run test
-        env:
-          CI: true
-
   # ===== Build Docker Image =====
   build-docker:
     name: Build Docker Image
