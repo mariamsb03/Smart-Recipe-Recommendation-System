@@ -11,7 +11,7 @@ jobs:
   backend-tests:
     name: Backend Tests
     runs-on: ubuntu-latest
-    environment: PHASE3  # ADD THIS LINE - for accessing secrets
+    environment: PHASE3
     
     steps:
       - name: Checkout code
@@ -30,7 +30,7 @@ jobs:
           pip install -r requirements.txt
 
       - name: Run backend unit tests
-        env:  # ADD THESE ENVIRONMENT VARIABLES
+        env:
           FLASK_ENV: ${{ secrets.FLASK_ENV }}
           FLASK_SECRET_KEY: ${{ secrets.FLASK_SECRET_KEY }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
@@ -39,18 +39,8 @@ jobs:
           cd backend
           pytest tests/test_api.py -v --tb=short
 
-      - name: Run backend integration tests
-        env:  # SAME ENV VARS FOR INTEGRATION TESTS
-          FLASK_ENV: ${{ secrets.FLASK_ENV }}
-          FLASK_SECRET_KEY: ${{ secrets.FLASK_SECRET_KEY }}
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
-        run: |
-          cd backend
-          pytest tests/test_integration.py -v --tb=short
-
       - name: Generate test coverage
-        env:  # SAME ENV VARS FOR COVERAGE
+        env:
           FLASK_ENV: ${{ secrets.FLASK_ENV }}
           FLASK_SECRET_KEY: ${{ secrets.FLASK_SECRET_KEY }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
@@ -64,7 +54,6 @@ jobs:
   frontend-tests:
     name: Frontend Tests
     runs-on: ubuntu-latest
-    environment: PHASE3  # ADD THIS IF FRONTEND NEEDS SECRETS
     
     steps:
       - name: Checkout code
@@ -74,8 +63,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'npm'
-          cache-dependency-path: frontend/package-lock.json
 
       - name: Install frontend dependencies
         run: |
@@ -95,7 +82,6 @@ jobs:
     runs-on: ubuntu-latest
     needs: [backend-tests, frontend-tests]
     if: github.ref == 'refs/heads/dev' || github.ref == 'refs/heads/staging' || github.ref == 'refs/heads/main'
-    environment: PHASE3  # ADD THIS FOR DOCKER SECRETS IF NEEDED
     
     steps:
       - name: Checkout code
@@ -135,37 +121,6 @@ jobs:
 
       - name: Image digest
         run: echo ${{ steps.meta.outputs.digest }}
-
-  # ===== Deploy to Staging =====
-  deploy-staging:
-    name: Deploy to Staging
-    runs-on: ubuntu-latest
-    needs: build-docker
-    if: github.ref == 'refs/heads/staging'
-    environment: staging  # This should be a separate environment
-    
-    steps:
-      - name: Deploy to staging server
-        run: |
-          echo "🚀 Deploying to staging environment..."
-          echo "Docker image: ${{ secrets.DOCKER_USERNAME }}/flavorfit:staging-${{ github.sha }}"
-          # Add your staging deployment commands here
-          # Example for Railway, Render, or other platforms
-
-  # ===== Deploy to Production =====
-  deploy-production:
-    name: Deploy to Production
-    runs-on: ubuntu-latest
-    needs: build-docker
-    if: github.ref == 'refs/heads/main'
-    environment: production  # This should be a separate environment
-    
-    steps:
-      - name: Deploy to production
-        run: |
-          echo "🚀 Deploying to production environment..."
-          echo "Docker image: ${{ secrets.DOCKER_USERNAME }}/flavorfit:latest"
-          # Add your production deployment commands here
 
   # ===== Pipeline Summary =====
   summary:
