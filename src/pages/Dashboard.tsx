@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import { Sidebar } from '@/components/Sidebar';
 import { RecipeCard } from '@/components/RecipeCard';
 import { useApp } from '@/context/AppContext';
