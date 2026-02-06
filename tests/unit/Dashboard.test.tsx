@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { BrowserRouter } from 'react-router-dom';
-import React, { useState } from 'react';
+import Dashboard from '@/pages/Dashboard';
 
 const mockNavigate = vi.fn();
 vi.mock('react-router-dom', async () => {
@@ -36,12 +36,6 @@ const createMockRecipes = (count: number) => {
   }));
 };
 
-// Mock the context ONCE at the module level
-const mockUseApp = vi.fn();
-vi.mock('@/context/AppContext', () => ({
-  useApp: () => mockUseApp(),
-}));
-
 vi.mock('@/components/Sidebar', () => ({
   Sidebar: () => <div data-testid="sidebar">Sidebar</div>,
 }));
@@ -54,19 +48,18 @@ vi.mock('@/components/RecipeCard', () => ({
   ),
 }));
 
-// Import Dashboard AFTER all mocks are set up
-import Dashboard from '@/pages/Dashboard';
-
 describe('Dashboard - Basic Rendering', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
   it('should render with user greeting', () => {
-    mockUseApp.mockReturnValue({
-      user: mockUser,
-      recipes: [],
-    });
+    vi.mock('@/context/AppContext', () => ({
+      useApp: () => ({
+        user: mockUser,
+        recipes: [],
+      }),
+    }));
 
     render(
       <BrowserRouter>
@@ -78,10 +71,12 @@ describe('Dashboard - Basic Rendering', () => {
   });
 
   it('should show welcome message', () => {
-    mockUseApp.mockReturnValue({
-      user: mockUser,
-      recipes: [],
-    });
+    vi.mock('@/context/AppContext', () => ({
+      useApp: () => ({
+        user: mockUser,
+        recipes: [],
+      }),
+    }));
 
     render(
       <BrowserRouter>
@@ -93,10 +88,12 @@ describe('Dashboard - Basic Rendering', () => {
   });
 
   it('should render sidebar', () => {
-    mockUseApp.mockReturnValue({
-      user: mockUser,
-      recipes: [],
-    });
+    vi.mock('@/context/AppContext', () => ({
+      useApp: () => ({
+        user: mockUser,
+        recipes: [],
+      }),
+    }));
 
     render(
       <BrowserRouter>
@@ -109,15 +106,13 @@ describe('Dashboard - Basic Rendering', () => {
 });
 
 describe('Dashboard - Quick Actions', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
-
   it('should display Find a Recipe button and navigate', () => {
-    mockUseApp.mockReturnValue({
-      user: mockUser,
-      recipes: [],
-    });
+    vi.mock('@/context/AppContext', () => ({
+      useApp: () => ({
+        user: mockUser,
+        recipes: [],
+      }),
+    }));
 
     render(
       <BrowserRouter>
@@ -133,10 +128,12 @@ describe('Dashboard - Quick Actions', () => {
   });
 
   it('should display Your Profile section', () => {
-    mockUseApp.mockReturnValue({
-      user: mockUser,
-      recipes: [],
-    });
+    vi.mock('@/context/AppContext', () => ({
+      useApp: () => ({
+        user: mockUser,
+        recipes: [],
+      }),
+    }));
 
     render(
       <BrowserRouter>
@@ -149,15 +146,13 @@ describe('Dashboard - Quick Actions', () => {
 });
 
 describe('Dashboard - Recipe Display', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
-
   it('should display Recommended for You heading', () => {
-    mockUseApp.mockReturnValue({
-      user: mockUser,
-      recipes: createMockRecipes(3),
-    });
+    vi.mock('@/context/AppContext', () => ({
+      useApp: () => ({
+        user: mockUser,
+        recipes: createMockRecipes(3),
+      }),
+    }));
 
     render(
       <BrowserRouter>
@@ -169,10 +164,12 @@ describe('Dashboard - Recipe Display', () => {
   });
 
   it('should show loading state when no recipes', () => {
-    mockUseApp.mockReturnValue({
-      user: mockUser,
-      recipes: [],
-    });
+    vi.mock('@/context/AppContext', () => ({
+      useApp: () => ({
+        user: mockUser,
+        recipes: [],
+      }),
+    }));
 
     render(
       <BrowserRouter>
