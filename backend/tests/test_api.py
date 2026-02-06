@@ -228,3 +228,37 @@ def test_post_with_invalid_json(client):
     
     # Should return error status
     assert response.status_code >= 400
+
+def test_get_profile_without_token(client):
+    """Test getting profile without auth token"""
+    response = client.get('/api/user/profile')
+    
+    # Debug: Print the actual error
+    print(f"\n=== DEBUG test_get_profile_without_token ===")
+    print(f"Status code: {response.status_code}")
+    print(f"Response data: {response.data.decode('utf-8')}")
+    
+    if response.status_code == 500:
+        try:
+            data = json.loads(response.data)
+            print(f"Error message: {data.get('message', 'No message')}")
+            print(f"Error type: {data.get('error', 'No error type')}")
+        except:
+            print(f"Raw response: {response.data}")
+    
+    assert response.status_code == 401
+    
+    data = json.loads(response.data)
+    assert 'error' in data
+
+def test_get_profile_with_invalid_token(client):
+    """Test getting profile with invalid token"""
+    response = client.get('/api/user/profile',
+                         headers={'Authorization': 'Bearer invalid-token'})
+    
+    # Debug: Print the actual error
+    print(f"\n=== DEBUG test_get_profile_with_invalid_token ===")
+    print(f"Status code: {response.status_code}")
+    print(f"Response data: {response.data.decode('utf-8')}")
+    
+    assert response.status_code == 401
