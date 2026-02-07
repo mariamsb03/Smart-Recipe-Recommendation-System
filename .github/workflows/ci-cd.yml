@@ -38,6 +38,8 @@ jobs:
           npm ci
 
       - name: Frontend - tests
+        env:
+          VITE_API_URL: ${{secrets.VITE_API_URL }}  
         run: |
           cd frontend
           npm run test -- --run
@@ -82,6 +84,7 @@ jobs:
     name: Push -> dev (tests)
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/dev'
+    environment: PHASE4
 
     steps:
       - name: Checkout
@@ -100,6 +103,8 @@ jobs:
           npm ci
 
       - name: Frontend - tests
+        env:
+          VITE_API_URL: ${{secrets.VITE_API_URL }}
         run: |
           cd frontend
           npm run test -- --run
