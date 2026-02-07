@@ -837,5 +837,5 @@ if __name__ == '__main__':
     else:
         print("✗ ML model not loaded")
     print("=" * 50)
-    port = int(os.getenv('PORT', 5000))
+    port = int(os.getenv('PORT', 8080))
     app.run(debug=True, host='0.0.0.0', port=port)
