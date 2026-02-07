@@ -367,4 +367,3 @@ jobs:
           echo "Staging Tests:        ${{ needs.staging-tests.result }}"
           echo "Docker Build:         ${{ needs.build-and-push-docker.result }}"
           echo "=================================================="
-          fi
