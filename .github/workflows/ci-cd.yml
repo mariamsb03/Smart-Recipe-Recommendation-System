@@ -7,6 +7,9 @@ on:
   push:
     branches: [ dev, staging, main ]
 
+permissions:
+  contents: write  # Changed from read to write for branch pushes
+
 # ======================================================
 # 1️⃣ PR → dev : Integration tests only
 # ======================================================
@@ -21,6 +24,24 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      # Frontend tests (unit)
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "18"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Frontend - install
+        run: |
+          cd frontend
+          npm ci
+
+      - name: Frontend - tests
+        run: |
+          cd frontend
+          npm run test -- --run
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -31,6 +52,16 @@ jobs:
         run: |
           pip install --upgrade pip
           pip install -r backend/requirements.txt
+      
+      - name: Backend - unit tests
+        env:
+          FLASK_ENV: ${{ secrets.FLASK_ENV }}
+          SECRET_KEY: ${{ secrets.SECRET_KEY }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          MLFLOW_TRACKING_URI: ${{ secrets.MLFLOW_TRACKING_URI }}
+        run: |
+          pytest backend/tests/unit -v
 
       - name: Run integration tests
         env:
@@ -43,30 +74,83 @@ jobs:
         run: |
           pytest backend/tests/integration -v
 
-
 # ======================================================
-# 2️⃣ Push → dev : no tests, just validation placeholder
-# ======================================================
+# 2️⃣ Push → dev : Run tests then auto-merge to staging
+# ======================================================    
   dev-push:
-    name: Dev Branch Push
+    name: Push -> dev (tests + auto-promote to staging)
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/dev'
+    environment: dev
 
     steps:
-      - name: Dev push acknowledged
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "18"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Frontend - install
         run: |
-          echo "✅ Code pushed to dev branch"
-          echo "➡️ Open PR to staging when ready"
+          cd frontend
+          npm ci
 
+      - name: Frontend - tests
+        run: |
+          cd frontend
+          npm run test -- --run
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+          cache: pip
+
+      - name: Backend - install
+        run: |
+          pip install -U pip
+          pip install -r backend/requirements.txt
+
+      - name: Backend - unit + integration tests
+        env:
+          FLASK_ENV: ${{ secrets.FLASK_ENV }}
+          SECRET_KEY: ${{ secrets.SECRET_KEY }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          MLFLOW_TRACKING_URI: ${{ secrets.MLFLOW_TRACKING_URI }}
+        run: |
+          pytest backend/tests/unit -v
+          pytest backend/tests/integration -v
+
+      # Auto-merge dev to staging if tests pass
+      - name: Auto-promote dev → staging
+        if: success()
+        run: |
+          git config --global user.name 'GitHub Actions'
+          git config --global user.email 'actions@github.com'
+          
+          # Fetch all branches
+          git fetch origin
+          
+          # Checkout staging branch
+          git checkout staging
+          
+          # Merge dev into staging
+          git merge origin/dev --no-ff -m "Auto-merge from dev to staging via CI/CD"
+          
+          # Push to staging
+          git push origin staging
+          echo "✅ Successfully promoted dev → staging"
 
 # ======================================================
-# 3️⃣ Push → staging : ALL tests
-# ======================================================
-  # ======================================================
-# 3️⃣ Push → staging : ALL tests
+# 3️⃣ Push → staging : ALL tests then auto-merge to main
 # ======================================================
   staging-tests:
-    name: Staging - Full Test Suite
+    name: Staging - Full Test Suite + Auto-promote to main
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/staging'
     environment: PHASE4
@@ -189,15 +273,37 @@ jobs:
           echo "Running E2E tests against: $E2E_BASE_URL"
           # Run tests with virtual display - FIXED TYPO: --auto-servernum
           xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" python -m pytest backend/tests/e2e -v
+      
+      # Auto-merge staging to main if ALL tests pass
+      - name: Auto-promote staging → main
+        if: success()
+        run: |
+          git config --global user.name 'GitHub Actions'
+          git config --global user.email 'actions@github.com'
+          
+          # Fetch all branches
+          git fetch origin
+          
+          # Checkout main branch
+          git checkout main
+          
+          # Merge staging into main
+          git merge origin/staging --no-ff -m "Auto-merge from staging to main via CI/CD"
+          
+          # Push to main (this will trigger the Docker build job)
+          git push origin main
+          echo "✅ Successfully promoted staging → main"
 
 # ======================================================
-# 4️⃣ Push → main : Build & push ONE Docker image
+# 4️⃣ Push → main : Build & push Docker image with sequential versioning
 # ======================================================
   build-and-push-docker:
     name: Production - Docker Build & Push
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main'
-    environment: PHASE4
+    environment: production
+    outputs:
+      version: ${{ steps.version.outputs.next_version_string }}
 
     steps:
       - name: Checkout code
@@ -212,69 +318,72 @@ jobs:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
-      - name: Extract metadata
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ secrets.DOCKER_USERNAME }}/flavorfit
-          tags: |
-            type=raw,value=latest
-            type=sha,prefix={{branch}}-
+      - name: Calculate next version from Docker Hub
+        id: version
+        env:
+          DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+        run: |
+          # Install jq for JSON parsing
+          sudo apt-get update && sudo apt-get install -y jq curl
+          
+          echo "Checking existing tags for: $DOCKER_USERNAME/flavorfit"
+          
+          # Get tags from Docker Hub API
+          API_URL="https://hub.docker.com/v2/repositories/$DOCKER_USERNAME/flavorfit/tags/"
+          TAGS_RESPONSE=$(curl -s "$API_URL" || echo '{"results": []}')
+          
+          # Extract all tag names
+          TAG_NAMES=$(echo "$TAGS_RESPONSE" | jq -r '.results[].name' 2>/dev/null || echo "")
+          
+          echo "Found tags: $TAG_NAMES"
+          
+          # Find highest vX number
+          HIGHEST_V=0
+          if [ -n "$TAG_NAMES" ]; then
+            for tag in $TAG_NAMES; do
+              if [[ $tag =~ ^v([0-9]+)$ ]]; then
+                NUM=${BASH_REMATCH[1]}
+                echo "Found v$NUM tag"
+                if [ $NUM -gt $HIGHEST_V ]; then
+                  HIGHEST_V=$NUM
+                fi
+              fi
+            done
+          fi
+          
+          # Calculate next version
+          NEXT_VERSION=$((HIGHEST_V + 1))
+          echo "Current highest: v$HIGHEST_V"
+          echo "Next version: v$NEXT_VERSION"
+          
+          echo "next_version=$NEXT_VERSION" >> $GITHUB_OUTPUT
+          echo "next_version_string=v$NEXT_VERSION" >> $GITHUB_OUTPUT
 
-      - name: Build and push Docker image
+      - name: Build and push Docker image with single tag
         uses: docker/build-push-action@v5
         with:
           context: .
           push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
+          tags: ${{ secrets.DOCKER_USERNAME }}/flavorfit:v${{ steps.version.outputs.next_version }}
           cache-from: type=registry,ref=${{ secrets.DOCKER_USERNAME }}/flavorfit:buildcache
           cache-to: type=registry,ref=${{ secrets.DOCKER_USERNAME }}/flavorfit:buildcache,mode=max
 
       - name: Image info
         run: |
           echo "✅ Docker image built and pushed"
-          echo "📦 Image: ${{ secrets.DOCKER_USERNAME }}/flavorfit:latest"
+          echo "📦 Image: ${{ secrets.DOCKER_USERNAME }}/flavorfit"
+          echo "🏷️  Tag: v${{ steps.version.outputs.next_version }}"
+          echo "🔖 Version: v${{ steps.version.outputs.next_version }}"
           echo "🔖 SHA: ${{ github.sha }}"
+          echo "🔄 Run #: ${{ github.run_number }}"
 
-
-# ======================================================
-# 5️⃣ Deploy to Railway (Production)
-# ======================================================
-  deploy-railway:
-    name: Deploy to Railway
-    runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
-    needs: build-and-push-docker
-    environment: production
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Trigger Railway Deployment
-        run: |
-          curl -X POST "${{ secrets.RAILWAY_DEPLOY_HOOK }}" \
-            -H "Content-Type: application/json" \
-            -d '{}'
+      # Trigger Railway to pull the updated :production tag
+      - name: Redeploy Railway (production)
+        uses: docker://ghcr.io/railwayapp/cli:latest
         env:
-          RAILWAY_DEPLOY_HOOK: ${{ secrets.RAILWAY_DEPLOY_HOOK }}
-
-      - name: Wait for deployment
-        run: |
-          echo "⏳ Waiting for Railway to pull and deploy the new image..."
-          sleep 30
-
-      - name: Deployment triggered
-        run: |
-          echo "================================================"
-          echo "🚂 Railway Deployment Triggered!"
-          echo "================================================"
-          echo "✅ Docker image: ${{ secrets.DOCKER_USERNAME }}/flavorfit:latest"
-          echo "🌐 Check Railway dashboard for deployment status"
-          echo "📍 Your app: https://your-app.up.railway.app"
-          echo "================================================"
-
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+        with:
+          args: redeploy --service=${{ secrets.RAILWAY_SERVICE_ID_PROD }} --yes
 
 # ======================================================
 # 6️⃣ Pipeline Summary
@@ -286,7 +395,6 @@ jobs:
       - pr-integration-tests
       - staging-tests
       - build-and-push-docker
-      - deploy-railway
     if: always()
 
     steps:
@@ -296,15 +404,4 @@ jobs:
           echo "PR Integration Tests: ${{ needs.pr-integration-tests.result }}"
           echo "Staging Tests:        ${{ needs.staging-tests.result }}"
           echo "Docker Build:         ${{ needs.build-and-push-docker.result }}"
-          echo "Railway Deploy:       ${{ needs.deploy-railway.result }}"
           echo "=================================================="
-          
-          if [[ "${{ needs.build-and-push-docker.result }}" == "failure" ]] || \
-             [[ "${{ needs.deploy-railway.result }}" == "failure" ]]; then
-            echo "❌ Deployment pipeline failed"
-            exit 1
-          elif [[ "${{ needs.build-and-push-docker.result }}" == "success" ]] && \
-               [[ "${{ needs.deploy-railway.result }}" == "success" ]]; then
-            echo "✅ Deployment successful!"
-            echo "🌐 Your app is live!"
-          fi
