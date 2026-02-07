@@ -50,11 +50,11 @@ RUN mkdir -p /app/uploads
 # ---------- Environment ----------
 ENV FLASK_ENV=production
 ENV PYTHONUNBUFFERED=1
-# Railway sets $PORT dynamically - default to 5000 for local
-ENV PORT=5000
+# Railway sets $PORT dynamically - default to 8080 for local
+ENV PORT=8080
 
 # ---------- Expose port ----------
-EXPOSE 5000
+EXPOSE 8080
 
 # ---------- Health check ----------
 HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
