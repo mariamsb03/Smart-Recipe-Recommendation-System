@@ -197,7 +197,7 @@ jobs:
     name: Production - Docker Build & Push
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main'
-    environment: PHASE4
+    environment: production
 
     steps:
       - name: Checkout code
