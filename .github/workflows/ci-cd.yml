@@ -294,6 +294,15 @@ jobs:
         run: |
           npm install -g @railway/cli
 
+      - name: Debug - Verify Token
+        run: |
+          echo "Token length: ${#RAILWAY_TOKEN} characters"
+          echo "First 10 chars: ${RAILWAY_TOKEN:0:10}..."
+          # Test token with curl
+          curl -s -H "Authorization: Bearer $RAILWAY_TOKEN" \
+            https://backboard.railway.app/graphql/v2 \
+            -d '{"query":"query { me { id name } }"}' | jq .
+
       - name: Deploy to Railway using CLI
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
