@@ -62,6 +62,9 @@ jobs:
 # ======================================================
 # 3️⃣ Push → staging : ALL tests
 # ======================================================
+  # ======================================================
+# 3️⃣ Push → staging : ALL tests
+# ======================================================
   staging-tests:
     name: Staging - Full Test Suite
     runs-on: ubuntu-latest
@@ -170,8 +173,8 @@ jobs:
           echo "Backend (5000):"
           curl -s -o /dev/null -w "%{http_code}" http://localhost:5000/health || echo "Failed"
           echo ""
-          echo "Frontend (5173):"
-          curl -s -o /dev/null -w "%{http_code}" http://localhost:5173 || echo "Failed"
+          echo "Frontend (8080):"  # Changed from 5173 to 8080
+          curl -s -o /dev/null -w "%{http_code}" http://localhost:8080 || echo "Failed"
 
       # -------- Run E2E Tests --------
       - name: Run end-to-end tests
@@ -184,8 +187,8 @@ jobs:
           MLFLOW_TRACKING_URI: ${{ secrets.MLFLOW_TRACKING_URI }}
         run: |
           echo "Running E2E tests against: $E2E_BASE_URL"
-          # Run tests with virtual display
-          xvfb-run --auto-serternum --server-args="-screen 0 1920x1080x24" python -m pytest backend/tests/e2e -v
+          # Run tests with virtual display - FIXED TYPO: --auto-servernum
+          xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" python -m pytest backend/tests/e2e -v
 
 # ======================================================
 # 4️⃣ Push → main : Build & push ONE Docker image
