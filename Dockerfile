@@ -10,11 +10,9 @@ RUN npm ci
 # Copy frontend source
 COPY frontend/ ./
 
-# Build argument for API URL
-ARG VITE_API_URL=https://flavorfit-production-83c1.up.railway.app/api
 
 # Build frontend - pass env var directly
-RUN VITE_API_URL=${VITE_API_URL} npm run build
+RUN https://flavorfit-production-83c1.up.railway.app/api npm run build
 
 
 # ============ Stage 2: Backend + Serve Frontend ============
