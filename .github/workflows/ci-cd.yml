@@ -339,13 +339,15 @@ jobs:
           echo "🔄 Run #: ${{ github.run_number }}"
 
 
-      # Trigger Railway to pull the updated :production tag
       - name: Redeploy Railway (production)
         uses: docker://ghcr.io/railwayapp/cli:latest
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
         with:
-          args: redeploy --service=${{ secrets.RAILWAY_SERVICE_ID_PROD }} --yes
+          args: |
+            redeploy 
+            --service=${{ secrets.RAILWAY_SERVICE_ID_PROD }} 
+            --yes
 
 # ======================================================
 # 6️⃣ Pipeline Summary
