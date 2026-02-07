@@ -8,7 +8,7 @@ on:
     branches: [ dev, staging, main ]
 
 permissions:
-  contents: write  # Changed from read to write for branch pushes
+  contents: read
 
 # ======================================================
 # 1️⃣ PR → dev : Integration tests only
@@ -74,14 +74,14 @@ jobs:
         run: |
           pytest backend/tests/integration -v
 
+
 # ======================================================
-# 2️⃣ Push → dev : Run tests then auto-merge to staging
+# 2️⃣ Push → dev : no tests, just validation placeholder
 # ======================================================    
   dev-push:
-    name: Push -> dev (tests + auto-promote to staging)
+    name: Push -> dev (tests)
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/dev'
-    environment: dev
 
     steps:
       - name: Checkout
@@ -126,31 +126,11 @@ jobs:
           pytest backend/tests/unit -v
           pytest backend/tests/integration -v
 
-      # Auto-merge dev to staging if tests pass
-      - name: Auto-promote dev → staging
-        if: success()
-        run: |
-          git config --global user.name 'GitHub Actions'
-          git config --global user.email 'actions@github.com'
-          
-          # Fetch all branches
-          git fetch origin
-          
-          # Checkout staging branch
-          git checkout staging
-          
-          # Merge dev into staging
-          git merge origin/dev --no-ff -m "Auto-merge from dev to staging via CI/CD"
-          
-          # Push to staging
-          git push origin staging
-          echo "✅ Successfully promoted dev → staging"
-
 # ======================================================
-# 3️⃣ Push → staging : ALL tests then auto-merge to main
+# 3️⃣ Push → staging : ALL tests
 # ======================================================
   staging-tests:
-    name: Staging - Full Test Suite + Auto-promote to main
+    name: Staging - Full Test Suite
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/staging'
     environment: PHASE4
@@ -273,26 +253,7 @@ jobs:
           echo "Running E2E tests against: $E2E_BASE_URL"
           # Run tests with virtual display - FIXED TYPO: --auto-servernum
           xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" python -m pytest backend/tests/e2e -v
-      
-      # Auto-merge staging to main if ALL tests pass
-      - name: Auto-promote staging → main
-        if: success()
-        run: |
-          git config --global user.name 'GitHub Actions'
-          git config --global user.email 'actions@github.com'
-          
-          # Fetch all branches
-          git fetch origin
-          
-          # Checkout main branch
-          git checkout main
-          
-          # Merge staging into main
-          git merge origin/staging --no-ff -m "Auto-merge from staging to main via CI/CD"
-          
-          # Push to main (this will trigger the Docker build job)
-          git push origin main
-          echo "✅ Successfully promoted staging → main"
+    
 
 # ======================================================
 # 4️⃣ Push → main : Build & push Docker image with sequential versioning
@@ -377,6 +338,7 @@ jobs:
           echo "🔖 SHA: ${{ github.sha }}"
           echo "🔄 Run #: ${{ github.run_number }}"
 
+
       # Trigger Railway to pull the updated :production tag
       - name: Redeploy Railway (production)
         uses: docker://ghcr.io/railwayapp/cli:latest
@@ -405,3 +367,4 @@ jobs:
           echo "Staging Tests:        ${{ needs.staging-tests.result }}"
           echo "Docker Build:         ${{ needs.build-and-push-docker.result }}"
           echo "=================================================="
+          fi
