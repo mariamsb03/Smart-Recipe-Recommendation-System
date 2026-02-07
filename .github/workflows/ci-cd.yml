@@ -62,9 +62,6 @@ jobs:
 # ======================================================
 # 3️⃣ Push → staging : ALL tests
 # ======================================================
-  # ======================================================
-# 3️⃣ Push → staging : ALL tests
-# ======================================================
   staging-tests:
     name: Staging - Full Test Suite
     runs-on: ubuntu-latest
@@ -191,7 +188,7 @@ jobs:
           xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" python -m pytest backend/tests/e2e -v
 
 # ======================================================
-# 4️⃣ Push → main : Build & push Docker image with custom versioning
+# 4️⃣ Push → main : Build & push Docker image with sequential versioning
 # ======================================================
   build-and-push-docker:
     name: Production - Docker Build & Push
@@ -255,28 +252,12 @@ jobs:
           echo "next_version=$NEXT_VERSION" >> $GITHUB_OUTPUT
           echo "next_version_string=v$NEXT_VERSION" >> $GITHUB_OUTPUT
 
-      - name: Extract metadata
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ secrets.DOCKER_USERNAME }}/flavorfit
-          tags: |
-            # Custom version based on Docker Hub tags
-            type=raw,value=v${{ steps.version.outputs.next_version }}
-            # Also tag as latest
-            type=raw,value=latest
-            # Branch + SHA for reference
-            type=sha,prefix={{branch}}-
-            # GitHub run number for tracking
-            type=raw,value=run-${{ github.run_number }}
-
-      - name: Build and push Docker image
+      - name: Build and push Docker image with single tag
         uses: docker/build-push-action@v5
         with:
           context: .
           push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
+          tags: ${{ secrets.DOCKER_USERNAME }}/flavorfit:v${{ steps.version.outputs.next_version }}
           cache-from: type=registry,ref=${{ secrets.DOCKER_USERNAME }}/flavorfit:buildcache
           cache-to: type=registry,ref=${{ secrets.DOCKER_USERNAME }}/flavorfit:buildcache,mode=max
 
@@ -284,10 +265,7 @@ jobs:
         run: |
           echo "✅ Docker image built and pushed"
           echo "📦 Image: ${{ secrets.DOCKER_USERNAME }}/flavorfit"
-          echo "🏷️  Tags:"
-          echo "${{ steps.meta.outputs.tags }}" | tr ',' '\n' | while read tag; do
-            echo "  - $tag"
-          done
+          echo "🏷️  Tag: v${{ steps.version.outputs.next_version }}"
           echo "🔖 Version: v${{ steps.version.outputs.next_version }}"
           echo "🔖 SHA: ${{ github.sha }}"
           echo "🔄 Run #: ${{ github.run_number }}"
@@ -322,11 +300,14 @@ jobs:
         run: |
           echo "🚂 Deploying to Railway..."
           
-          # Login with token
-          railway login --token $RAILWAY_TOKEN
+          # Set the token as environment variable (NEW WAY)
+          echo "Setting Railway token from secret..."
           
-          # Link to project
-          railway link ${{ secrets.RAILWAY_PROJECT_ID }}
+          # Method 1: Use environment variable (preferred)
+          export RAILWAY_TOKEN="${{ secrets.RAILWAY_TOKEN }}"
+          
+          # Link to project using the token
+          railway link --project ${{ secrets.RAILWAY_PROJECT_ID }}
           
           # Deploy the specific service
           railway up --service ${{ secrets.RAILWAY_SERVICE_ID }} --detach
@@ -353,8 +334,9 @@ jobs:
           
           echo "Deployment info: $DEPLOYMENT_INFO"
           
-          # Try to get service URL
-          SERVICE_URL=$(railway status --service ${{ secrets.RAILWAY_SERVICE_ID }} --json | jq -r '.service.deployments[0].staticUrl // .service.deployments[0].url // "Not available"')
+          # Try to get service URL using Railway CLI with token
+          export RAILWAY_TOKEN="${{ secrets.RAILWAY_TOKEN }}"
+          SERVICE_URL=$(railway status --json 2>/dev/null | jq -r '.service.deployments[0].staticUrl // .service.deployments[0].url // "Not available"' 2>/dev/null || echo "URL not available")
           
           echo "================================================"
           echo "🚂 Railway Deployment Complete!"
@@ -365,7 +347,6 @@ jobs:
           echo "📦 Railway Project ID: ${{ secrets.RAILWAY_PROJECT_ID }}"
           echo "🔧 Service ID: ${{ secrets.RAILWAY_SERVICE_ID }}"
           echo "================================================"
-
 
 # ======================================================
 # 6️⃣ Pipeline Summary
