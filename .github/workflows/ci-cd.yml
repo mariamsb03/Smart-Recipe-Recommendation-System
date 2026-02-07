@@ -191,13 +191,15 @@ jobs:
           xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" python -m pytest backend/tests/e2e -v
 
 # ======================================================
-# 4️⃣ Push → main : Build & push ONE Docker image
+# 4️⃣ Push → main : Build & push Docker image with custom versioning
 # ======================================================
   build-and-push-docker:
     name: Production - Docker Build & Push
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main'
     environment: production
+    outputs:
+      version: ${{ steps.version.outputs.next_version_string }}
 
     steps:
       - name: Checkout code
@@ -212,17 +214,61 @@ jobs:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
-      - name: Extract metadata with version tags
+      - name: Calculate next version from Docker Hub
+        id: version
+        env:
+          DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+        run: |
+          # Install jq for JSON parsing
+          sudo apt-get update && sudo apt-get install -y jq curl
+          
+          echo "Checking existing tags for: $DOCKER_USERNAME/flavorfit"
+          
+          # Get tags from Docker Hub API
+          API_URL="https://hub.docker.com/v2/repositories/$DOCKER_USERNAME/flavorfit/tags/"
+          TAGS_RESPONSE=$(curl -s "$API_URL" || echo '{"results": []}')
+          
+          # Extract all tag names
+          TAG_NAMES=$(echo "$TAGS_RESPONSE" | jq -r '.results[].name' 2>/dev/null || echo "")
+          
+          echo "Found tags: $TAG_NAMES"
+          
+          # Find highest vX number
+          HIGHEST_V=0
+          if [ -n "$TAG_NAMES" ]; then
+            for tag in $TAG_NAMES; do
+              if [[ $tag =~ ^v([0-9]+)$ ]]; then
+                NUM=${BASH_REMATCH[1]}
+                echo "Found v$NUM tag"
+                if [ $NUM -gt $HIGHEST_V ]; then
+                  HIGHEST_V=$NUM
+                fi
+              fi
+            done
+          fi
+          
+          # Calculate next version
+          NEXT_VERSION=$((HIGHEST_V + 1))
+          echo "Current highest: v$HIGHEST_V"
+          echo "Next version: v$NEXT_VERSION"
+          
+          echo "next_version=$NEXT_VERSION" >> $GITHUB_OUTPUT
+          echo "next_version_string=v$NEXT_VERSION" >> $GITHUB_OUTPUT
+
+      - name: Extract metadata
         id: meta
         uses: docker/metadata-action@v5
         with:
           images: ${{ secrets.DOCKER_USERNAME }}/flavorfit
           tags: |
-            # Version tags
-            type=raw,value=v${{ github.run_number }}  # v1, v2, v3, etc.
+            # Custom version based on Docker Hub tags
+            type=raw,value=v${{ steps.version.outputs.next_version }}
+            # Also tag as latest
             type=raw,value=latest
             # Branch + SHA for reference
             type=sha,prefix={{branch}}-
+            # GitHub run number for tracking
+            type=raw,value=run-${{ github.run_number }}
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
@@ -242,6 +288,7 @@ jobs:
           echo "${{ steps.meta.outputs.tags }}" | tr ',' '\n' | while read tag; do
             echo "  - $tag"
           done
+          echo "🔖 Version: v${{ steps.version.outputs.next_version }}"
           echo "🔖 SHA: ${{ github.sha }}"
           echo "🔄 Run #: ${{ github.run_number }}"
 
@@ -312,7 +359,8 @@ jobs:
           echo "================================================"
           echo "🚂 Railway Deployment Complete!"
           echo "================================================"
-          echo "✅ Docker image: ${{ secrets.DOCKER_USERNAME }}/flavorfit:latest"
+          echo "✅ Docker image: ${{ secrets.DOCKER_USERNAME }}/flavorfit:v${{ needs.build-and-push-docker.outputs.version }}"
+          echo "✅ Also available as: ${{ secrets.DOCKER_USERNAME }}/flavorfit:latest"
           echo "🌐 Service URL: $SERVICE_URL"
           echo "📦 Railway Project ID: ${{ secrets.RAILWAY_PROJECT_ID }}"
           echo "🔧 Service ID: ${{ secrets.RAILWAY_SERVICE_ID }}"
