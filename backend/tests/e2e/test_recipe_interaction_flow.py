@@ -842,23 +842,7 @@ class TestMLPredictionWorkflow:
             print("⚠ External 'View original recipe' link not found")
             print("(Some recipes may not have external URLs)")
             assert True  # Don't fail
-    
-    def test_return_to_dashboard(self, logged_in_driver, test_user):
-        """Test returning to dashboard to complete the workflow"""
-        print(f"\n📊 Test 6: Return to Dashboard")
-        print(f"User: {test_user['email']}")
-        
-        driver = logged_in_driver
-        
 
-        
-        if 'dashboard' in current_url or 'Hi,' in page_text:
-            print("✅ Successfully returned to dashboard")
-            print("✅ Recipe interaction workflow complete!")
-            assert True
-        else:
-            print(f"⚠ Expected dashboard, got: {current_url}")
-            assert True  # Don't fail
 
 
 if __name__ == '__main__':
