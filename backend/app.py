@@ -830,7 +830,7 @@ def health_check():
 @app.route('/', defaults={'path': ''})
 @app.route('/<path:path>')
 def serve_frontend(path):
-    """Serve the React frontend"""
+    """Serve React app for all non-API routes"""
     # Skip API routes
     if path.startswith('api/'):
         return jsonify({'error': 'Not found'}), 404
@@ -839,6 +839,7 @@ def serve_frontend(path):
     if path and os.path.exists(os.path.join(app.static_folder, path)):
         return send_from_directory(app.static_folder, path)
     
+    # Default to index.html for all other routes
     return send_from_directory(app.static_folder, 'index.html')
 
 # ============= RUN APP =============
