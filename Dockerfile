@@ -4,7 +4,7 @@
 # ==================================
 
 # ============ Stage 1: Build Frontend ============
-FROM node:18-alpine as frontend-builder
+FROM node:18-alpine AS frontend-builder
 
 WORKDIR /app/frontend
 
@@ -20,7 +20,7 @@ ARG VITE_API_URL=https://flavorfit-production-83c1.up.railway.app/api
 ENV VITE_API_URL=${VITE_API_URL}
 
 # Build frontend with the API URL
-RUN npm run build
+RUN VITE_API_URL=${VITE_API_URL} npm run build 
 
 
 # ============ Stage 2: Backend + Serve Frontend ============
@@ -64,4 +64,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
 
 # ---------- Start app ----------
 # Use sh -c to evaluate $PORT at runtime
-CMD sh -c "gunicorn --bind 0.0.0.0:${PORT} --workers 2 --threads 2 --timeout 120 app:app"
+CMD ["sh", "-c", "gunicorn --bind 0.0.0.0:${PORT} --workers 2 --threads 2 --timeout 120 app:app"] 
