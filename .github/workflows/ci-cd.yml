@@ -274,88 +274,119 @@ jobs:
 # ======================================================
 # 5️⃣ Deploy to Railway (Production) - USING TOKEN
 # ======================================================
-  deploy-railway:
-    name: Deploy to Railway
-    runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
-    needs: build-and-push-docker
-    environment: production
+deploy-railway:
+  name: Deploy to Railway
+  runs-on: ubuntu-latest
+  if: github.ref == 'refs/heads/main'
+  needs: build-and-push-docker
+  environment: production
 
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+  steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
 
-      - name: Setup Node.js for Railway CLI
-        uses: actions/setup-node@v4
-        with:
-          node-version: '18'
+    - name: Setup Node.js for Railway CLI
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
 
-      - name: Install Railway CLI
-        run: |
-          npm install -g @railway/cli
+    - name: Install Railway CLI
+      run: |
+        npm install -g @railway/cli
 
-      - name: Debug - Verify Token
-        run: |
-          echo "Token length: ${#RAILWAY_TOKEN} characters"
-          echo "First 10 chars: ${RAILWAY_TOKEN:0:10}..."
-          # Test token with curl
-          curl -s -H "Authorization: Bearer $RAILWAY_TOKEN" \
-            https://backboard.railway.app/graphql/v2 \
-            -d '{"query":"query { me { id name } }"}' | jq .
+    - name: Debug - Verify Environment Secrets
+      env:
+        RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+        RAILWAY_PROJECT_ID: ${{ secrets.RAILWAY_PROJECT_ID }}
+        RAILWAY_SERVICE_ID: ${{ secrets.RAILWAY_SERVICE_ID }}
+      run: |
+        echo "=== DEBUG ENVIRONMENT SECRETS ==="
+        echo "RAILWAY_TOKEN length: ${#RAILWAY_TOKEN}"
+        if [ -n "$RAILWAY_TOKEN" ]; then
+          echo "✅ RAILWAY_TOKEN exists"
+          echo "First 8 chars: ${RAILWAY_TOKEN:0:8}"
+          # Test if token is valid format
+          if [[ $RAILWAY_TOKEN == rw_* ]]; then
+            echo "✅ Token format correct (starts with 'rw_')"
+          else
+            echo "❌ Token format incorrect! Should start with 'rw_'"
+            exit 1
+          fi
+        else
+          echo "❌ RAILWAY_TOKEN is EMPTY!"
+          exit 1
+        fi
+        
+        echo ""
+        echo "RAILWAY_PROJECT_ID: $RAILWAY_PROJECT_ID"
+        echo "RAILWAY_SERVICE_ID: $RAILWAY_SERVICE_ID"
+        echo "==================================="
 
-      - name: Deploy to Railway using CLI
-        env:
-          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
-        run: |
-          echo "🚂 Deploying to Railway..."
-          
-          # Set the token as environment variable (NEW WAY)
-          echo "Setting Railway token from secret..."
-          
-          # Method 1: Use environment variable (preferred)
-          export RAILWAY_TOKEN="${{ secrets.RAILWAY_TOKEN }}"
-          
-          # Link to project using the token
-          railway link --project ${{ secrets.RAILWAY_PROJECT_ID }}
-          
-          # Deploy the specific service
-          railway up --service ${{ secrets.RAILWAY_SERVICE_ID }} --detach
-          
-          echo "✅ Deployment initiated!"
+    - name: Deploy to Railway using CLI
+      env:
+        RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+        RAILWAY_PROJECT_ID: ${{ secrets.RAILWAY_PROJECT_ID }}
+        RAILWAY_SERVICE_ID: ${{ secrets.RAILWAY_SERVICE_ID }}
+      run: |
+        echo "🚂 Deploying to Railway..."
+        echo "Using token starting with: ${RAILWAY_TOKEN:0:8}..."
+        
+        # METHOD 1: Use RAILWAY_TOKEN environment variable (automatic)
+        echo "Logging in with token..."
+        
+        # Verify login works
+        railway whoami || {
+          echo "❌ Failed to authenticate with Railway"
+          echo "Check if token is valid: railway token"
+          exit 1
+        }
+        
+        # Link to the specific project
+        echo "Linking to project: $RAILWAY_PROJECT_ID"
+        railway link "$RAILWAY_PROJECT_ID" || {
+          echo "❌ Failed to link to project"
+          echo "Check if project ID is correct and token has access"
+          exit 1
+        }
+        
+        # Deploy the specific service
+        echo "Deploying service: $RAILWAY_SERVICE_ID"
+        railway up --service "$RAILWAY_SERVICE_ID" --detach
+        
+        echo "✅ Deployment initiated!"
 
-      - name: Wait for deployment
-        run: |
-          echo "⏳ Waiting for Railway to deploy (up to 60 seconds)..."
-          sleep 45
+    - name: Wait for deployment
+      run: |
+        echo "⏳ Waiting for Railway to deploy..."
+        sleep 30
 
-      - name: Check deployment status
-        env:
-          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
-        run: |
-          echo "📊 Checking deployment status..."
-          
-          # Get latest deployment
-          DEPLOYMENT_INFO=$(curl -s -X GET \
-            -H "Authorization: Bearer $RAILWAY_TOKEN" \
-            -H "Content-Type: application/json" \
-            "https://backboard.railway.app/graphql/v2" \
-            -d '{"query":"query { project(id: \"${{ secrets.RAILWAY_PROJECT_ID }}\") { deployments(first: 1) { edges { node { id status createdAt } } } } }"}')
-          
-          echo "Deployment info: $DEPLOYMENT_INFO"
-          
-          # Try to get service URL using Railway CLI with token
-          export RAILWAY_TOKEN="${{ secrets.RAILWAY_TOKEN }}"
-          SERVICE_URL=$(railway status --json 2>/dev/null | jq -r '.service.deployments[0].staticUrl // .service.deployments[0].url // "Not available"' 2>/dev/null || echo "URL not available")
-          
-          echo "================================================"
-          echo "🚂 Railway Deployment Complete!"
-          echo "================================================"
-          echo "✅ Docker image: ${{ secrets.DOCKER_USERNAME }}/flavorfit:v${{ needs.build-and-push-docker.outputs.version }}"
-          echo "✅ Also available as: ${{ secrets.DOCKER_USERNAME }}/flavorfit:latest"
-          echo "🌐 Service URL: $SERVICE_URL"
-          echo "📦 Railway Project ID: ${{ secrets.RAILWAY_PROJECT_ID }}"
-          echo "🔧 Service ID: ${{ secrets.RAILWAY_SERVICE_ID }}"
-          echo "================================================"
+    - name: Check deployment status
+      env:
+        RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+        RAILWAY_PROJECT_ID: ${{ secrets.RAILWAY_PROJECT_ID }}
+        RAILWAY_SERVICE_ID: ${{ secrets.RAILWAY_SERVICE_ID }}
+      run: |
+        echo "📊 Checking deployment status..."
+        
+        # Login again to ensure token is set
+        export RAILWAY_TOKEN="$RAILWAY_TOKEN"
+        
+        # Check service status
+        railway status --service "$RAILWAY_SERVICE_ID" || echo "Status check failed, continuing..."
+        
+        # Try to get URL
+        SERVICE_URL=$(railway status --service "$RAILWAY_SERVICE_ID" --json 2>/dev/null | \
+          jq -r '.service.deployments[0].staticUrl // .service.deployments[0].url // "URL not available"' 2>/dev/null || \
+          echo "Could not retrieve URL")
+        
+        echo "================================================"
+        echo "🚂 Railway Deployment Report"
+        echo "================================================"
+        echo "✅ Docker image: ${{ secrets.DOCKER_USERNAME }}/flavorfit:v${{ needs.build-and-push-docker.outputs.version }}"
+        echo "🌐 Service URL: $SERVICE_URL"
+        echo "📦 Railway Project ID: $RAILWAY_PROJECT_ID"
+        echo "🔧 Service ID: $RAILWAY_SERVICE_ID"
+        echo "================================================"
 
 # ======================================================
 # 6️⃣ Pipeline Summary
