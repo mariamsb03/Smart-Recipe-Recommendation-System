@@ -4,20 +4,22 @@
 # ==================================
 
 # ============ Stage 1: Build Frontend ============
-FROM node:20-alpine AS frontend-builder
+FROM node:18-alpine as frontend-builder
 
-WORKDIR /frontend
+WORKDIR /app/frontend
 
-# Copy frontend dependency files
+# Copy frontend files
 COPY frontend/package*.json ./
-
-# Install frontend dependencies
 RUN npm ci
 
-# Copy frontend source code
+# Copy frontend source
 COPY frontend/ ./
 
-# Build frontend for production
+# Build argument for API URL - DEFAULT to Railway URL
+ARG VITE_API_URL=https://flavorfit-production-83c1.up.railway.app/api
+ENV VITE_API_URL=${VITE_API_URL}
+
+# Build frontend with the API URL
 RUN npm run build
 
 
@@ -42,7 +44,7 @@ COPY backend/ .
 
 # ---------- Frontend build ----------
 # Flask will serve this directory
-COPY --from=frontend-builder /frontend/dist ./static
+COPY --from=frontend-builder /app/frontend/dist ./static  # ✅ FIXED PATH
 
 # ---------- Runtime directories ----------
 RUN mkdir -p /app/uploads
