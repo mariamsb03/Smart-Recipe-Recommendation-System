@@ -4,11 +4,7 @@ FROM node:18-alpine AS frontend-builder
 WORKDIR /app/frontend
 
 # Copy ALL configuration files first
-COPY frontend/package*.json ./
-COPY frontend/package-lock.json ./
-COPY frontend/tsconfig.json ./
-COPY frontend/tsconfig.node.json ./
-COPY frontend/vite.config.ts ./
+COPY frontend/ ./
 
 # Install dependencies
 RUN npm ci
