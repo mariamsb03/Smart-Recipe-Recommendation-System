@@ -417,6 +417,6 @@ deploy-railway:
             exit 1
           elif [[ "${{ needs.build-and-push-docker.result }}" == "success" ]] && \
                [[ "${{ needs.deploy-railway.result }}" == "success" ]]; then
-            echo "✅ Deployment successful!"
+            echo "✅ Deployment successfully!"
             echo "🌐 Your app is live!"
           fi
