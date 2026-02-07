@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 from dotenv import load_dotenv
 import os
@@ -7,14 +7,32 @@ import bcrypt
 import jwt
 from datetime import datetime, timedelta
 import json
+import mlflow
+import mlflow.pyfunc
+import pandas as pd
+from model_loader import load_production_model 
 
 # Load environment variables
 load_dotenv()
 
 # Initialize Flask app
-app = Flask(__name__)
+app = Flask(__name__, static_folder='static', static_url_path='')
 app.config['SECRET_KEY'] = os.getenv('FLASK_SECRET_KEY', 'dev-secret-key')
 CORS(app)
+
+MLFLOW_URI = os.getenv('MLFLOW_TRACKING_URI', 'http://127.0.0.1:5001')
+MLFLOW_EXPERIMENT = os.getenv('MLFLOW_EXPERIMENT', 'FlavorFit-Recommendation')
+
+mlflow.set_tracking_uri(MLFLOW_URI)
+mlflow.set_experiment(MLFLOW_EXPERIMENT)
+
+# ================= LOAD MODEL ==================
+try:
+    ml_model = load_production_model()
+    print("✓ ML model loaded successfully")
+except Exception as e:
+    ml_model = None
+    print(f"✗ ML model failed to load: {e}")
 
 # Initialize Supabase client
 supabase_url = os.getenv('SUPABASE_URL')
@@ -25,6 +43,7 @@ if not supabase_url or not supabase_key:
     supabase = None
 else:
     supabase: Client = create_client(supabase_url, supabase_key)
+
 
 # ============= HELPER FUNCTIONS =============
 
@@ -94,6 +113,57 @@ def format_recipe(recipe):
         'img_src': recipe.get('img_src', ''),
         'directions': recipe.get('directions', '')
     }
+
+
+# ============= ML HELPER FUNCTIONS =============
+def compute_recipe_features(user_prefs, recipe):
+    """
+    Compute the 5 features needed by the model
+    (Same as the working test version)
+    
+    Args:
+        user_prefs: dict with user preferences
+        recipe: dict with recipe details
+    
+    Returns:
+        dict with the 5 computed features
+    """
+    # Feature 1: User preference - max cooking time
+    max_cooking_time = user_prefs.get('max_cooking_time', 60)
+    
+    # Feature 2: Recipe attribute - cook time
+    recipe_cook_time = recipe.get('cook_time_minutes', 30)
+    
+    # Feature 3: Difference in cooking time
+    cook_time_diff = abs(recipe_cook_time - max_cooking_time)
+    
+    # Feature 4: Ingredient overlap ratio
+    # Calculate how many ingredients user can eat vs total ingredients
+    user_allergies = set(user_prefs.get('allergies', []))
+    user_dislikes = set(user_prefs.get('disliked_ingredients', []))
+    recipe_ingredients = set(parse_ingredients_list(recipe.get('ingredients_list', [])))
+    
+    blocked_ingredients = user_allergies | user_dislikes
+    usable_ingredients = recipe_ingredients - blocked_ingredients
+    ingredient_overlap_ratio = len(usable_ingredients) / len(recipe_ingredients) if recipe_ingredients else 0
+    
+    # Feature 5: Cuisine similarity
+    # 1.0 if recipe cuisine matches user preference, 0.0 otherwise
+    user_cuisines = user_prefs.get('preferred_cuisine', [])
+    if isinstance(user_cuisines, str):
+        user_cuisines = [user_cuisines]
+    user_cuisines = set([c.lower().strip() for c in user_cuisines])
+    recipe_cuisine = str(recipe.get('cuisine', '')).lower().strip()
+    cuisine_similarity = 1.0 if recipe_cuisine in user_cuisines else 0.0
+    
+    return {
+        'max_cooking_time': max_cooking_time,
+        'recipe_cook_time': recipe_cook_time,
+        'cook_time_diff': cook_time_diff,
+        'ingredient_overlap_ratio': ingredient_overlap_ratio,
+        'cuisine_similarity': cuisine_similarity
+    }
+
 
 # ============= AUTH ROUTES =============
 
@@ -512,6 +582,219 @@ def get_disliked_recipes():
         print(f"Get disliked recipes error: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
+# ============= ML RECOMMENDATION ROUTE ============
+@app.route('/api/recommend', methods=['POST'])
+def recommend():
+    """Recommend recipes based on ML model with ingredient search filtering"""
+    try:
+        if not supabase:
+            return jsonify({'error': 'Database not configured'}), 500
+        if not ml_model:
+            return jsonify({'error': 'ML model not loaded'}), 500
+
+        data = request.json
+        user_id = data.get('user_id')
+        if not user_id:
+            return jsonify({'error': 'user_id required'}), 400
+
+        # Get search ingredients from request
+        search_ingredients = data.get('search_ingredients', [])  # e.g., ['chicken']
+        if isinstance(search_ingredients, str):
+            search_ingredients = [search_ingredients]
+        search_ingredients = set([ing.lower().strip() for ing in search_ingredients if ing])
+
+        # ---------------- Fetch user -----------------
+        user_result = supabase.table('users').select('*').eq('id', user_id).execute()
+        if not user_result.data:
+            return jsonify({'error': 'User not found'}), 404
+        user = user_result.data[0]
+
+        allergies = set(user.get('allergies', []))
+        disliked = set(user.get('disliked_ingredients', []))
+        diet = user.get('diet', 'regular')
+
+        user_prefs = {
+            'preferred_cuisine': data.get('preferred_cuisine', []),
+            'max_cooking_time': data.get('max_cooking_time', 60),
+            'allergies': list(allergies),
+            'disliked_ingredients': list(disliked),
+            'diet': diet
+        }
+
+        # ---------------- Fetch recipes ----------------
+        recipes_result = supabase.table('recipes').select('*').execute()
+        recipes = recipes_result.data
+
+        # ---------------- Hard rules filter ----------------
+        # Get preferred cuisines
+        preferred_cuisines = user_prefs.get('preferred_cuisine', [])
+        if isinstance(preferred_cuisines, str):
+            preferred_cuisines = [preferred_cuisines]
+        preferred_cuisines = set([c.lower().strip() for c in preferred_cuisines if c])
+        
+        # Map cuisine categories to actual database cuisines
+        CUISINE_MAPPING = {
+            'mediterranean': {'greek', 'moroccan', 'spanish', 'middle eastern', 'turkish', 'lebanese'},
+            'asian': {'chinese', 'japanese', 'thai', 'vietnamese', 'korean', 'asian'},
+            'european': {'french', 'italian', 'german', 'british', 'english', 'spanish', 'polish', 'dutch', 'austrian', 'scandinavian', 'hungarian', 'irish'}
+        }
+        
+        # Expand preferred cuisines based on mapping
+        expanded_cuisines = set()
+        for pref in preferred_cuisines:
+            if pref in CUISINE_MAPPING:
+                # Add all related cuisines
+                expanded_cuisines.update(CUISINE_MAPPING[pref])
+            else:
+                # Keep the original cuisine
+                expanded_cuisines.add(pref)
+        
+        # Use expanded cuisines for filtering
+        filter_cuisines = expanded_cuisines if expanded_cuisines else set()
+        
+        filtered = []
+        for r in recipes:
+            ingredients = set(parse_ingredients_list(r.get('ingredients_list')))
+            
+            # Skip if contains allergies
+            if allergies & ingredients:
+                continue
+            
+            # Skip if contains disliked ingredients
+            if disliked & ingredients:
+                continue
+            
+            # Skip if diet doesn't match
+            if diet != 'regular' and r.get('diet') != diet:
+                continue
+            
+            # **HARD FILTER: Skip if cuisine doesn't match (when user specified one)**
+            if filter_cuisines:
+                recipe_cuisine = str(r.get('cuisine', '')).lower().strip()
+                if recipe_cuisine not in filter_cuisines:
+                    continue
+            
+            # **If user searched for specific ingredients, only include recipes that contain them**
+            if search_ingredients:
+                # Convert recipe ingredients to lowercase for comparison
+                recipe_ingredients_lower = set([ing.lower().strip() for ing in ingredients])
+                
+                # Check if ANY of the searched ingredients are in the recipe
+                # Use partial matching (e.g., "chicken" matches "chicken breast")
+                if not any(
+                    search_ing in recipe_ing 
+                    for search_ing in search_ingredients 
+                    for recipe_ing in recipe_ingredients_lower
+                ):
+                    continue
+            
+            filtered.append(r)
+
+        if not filtered:
+            message = 'No recipes found with these ingredients' if search_ingredients else 'No recipes match your preferences'
+            return jsonify({'recipes': [], 'message': message, 'total_candidates': 0, 'total_scored': 0})
+
+        # ---------------- ML scoring with boosting ----------------
+        scored = []
+        with mlflow.start_run(run_name=f"user_{user_id}_inference"):
+            # ---- SAFE PARAMS ----
+            mlflow.log_param("user_id", user_id)
+            mlflow.log_param("num_candidates", len(filtered))
+
+            if search_ingredients:
+                mlflow.log_param(
+                    "search_ingredients",
+                    ",".join(sorted(search_ingredients))  # ✅ stringify
+                )
+
+            if preferred_cuisines:
+                mlflow.log_param(
+                    "preferred_cuisines",
+                    ",".join(sorted(preferred_cuisines))  # ✅ stringify
+                )
+
+            for recipe in filtered:
+                features = compute_recipe_features(user_prefs, recipe)
+                input_df = pd.DataFrame([features])
+                
+                try:
+                    # Get base ML score
+                    base_score = float(ml_model.predict(input_df)[0])
+                    
+                    # Apply boosting to make scores more meaningful
+                    boosted_score = base_score
+                    
+                    # BOOST 1: Ingredient search match (0.2 bonus per matching ingredient)
+                    if search_ingredients:
+                        recipe_ingredients = set([ing.lower().strip() for ing in parse_ingredients_list(recipe.get('ingredients_list', []))])
+                        matches = sum(1 for search_ing in search_ingredients 
+                                    if any(search_ing in recipe_ing for recipe_ing in recipe_ingredients))
+                        if matches > 0:
+                            ingredient_boost = matches * 0.2
+                            boosted_score += ingredient_boost
+                            mlflow.log_metric(f"recipe_{recipe['id']}_ingredient_boost", ingredient_boost)
+                    
+                    # BOOST 2: Perfect/near-perfect cooking time match
+                    cook_time = recipe.get('cook_time_minutes', 60)
+                    max_time = user_prefs.get('max_cooking_time', 60)
+                    time_diff = abs(cook_time - max_time)
+                    if time_diff <= 5:
+                        time_boost = 0.15  # Within 5 minutes
+                        boosted_score += time_boost
+                    elif time_diff <= 15:
+                        time_boost = 0.10  # Within 15 minutes
+                        boosted_score += time_boost
+                    elif time_diff <= 30:
+                        time_boost = 0.05  # Within 30 minutes
+                        boosted_score += time_boost
+                    
+                    # BOOST 3: Cuisine match (already filtered, but boost for logging)
+                    if preferred_cuisines:
+                        recipe_cuisine = str(recipe.get('cuisine', '')).lower().strip()
+                        if recipe_cuisine in preferred_cuisines:
+                            cuisine_boost = 0.1
+                            boosted_score += cuisine_boost
+                    
+                    # Cap the score at 1.0 (100%)
+                    final_score = min(1.0, boosted_score)
+                    
+                    mlflow.log_metric(f"recipe_{recipe['id']}_base_score", base_score)
+                    mlflow.log_metric(f"recipe_{recipe['id']}_final_score", final_score)
+                    
+                except Exception as e:
+                    final_score = 0.0
+                    print(f"ML prediction error for recipe {recipe['id']}: {e}")
+                    print(f"Features were: {features}")
+                
+                scored.append((recipe, final_score))
+
+            scored.sort(key=lambda x: x[1], reverse=True)
+            if scored:
+                mlflow.log_param('top_recipe', scored[0][0]['recipe_name'])
+                mlflow.log_metric('top_score', scored[0][1])
+
+        # ---------------- Build response ----------------
+        response = []
+        for r, score in scored:
+            item = format_recipe(r)
+            item['ml_score'] = round(score, 4)
+            response.append(item)
+
+        return jsonify({
+            'recipes': response,
+            'total_candidates': len(filtered),
+            'total_scored': len(scored),
+            'search_ingredients': list(search_ingredients) if search_ingredients else []
+        })
+
+    except Exception as e:
+        print(f"Recommendation error: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+    
+
+
 # ============= HEALTH CHECK =============
 
 @app.route('/api/health', methods=['GET'])
@@ -523,20 +806,21 @@ def health_check():
         'database': 'connected' if supabase else 'not configured'
     }), 200
 
-@app.route('/')
-def index():
-    """Root endpoint"""
-    return jsonify({
-        'message': 'FlavorFit API',
-        'version': '1.0.0',
-        'endpoints': {
-            'auth': ['/api/auth/signup', '/api/auth/login'],
-            'user': ['/api/user/profile'],
-            'recipes': ['/api/recipes', '/api/recipes/<id>'],
-            'interactions': ['/api/recipes/<id>/like', '/api/recipes/<id>/dislike'],
-            'health': '/api/health'
-        }
-    }), 200
+# ============= SERVE FRONTEND =============
+
+@app.route('/', defaults={'path': ''})
+@app.route('/<path:path>')
+def serve_frontend(path):
+    """Serve the React frontend"""
+    # Skip API routes
+    if path.startswith('api/'):
+        return jsonify({'error': 'Not found'}), 404
+    
+    # Serve static files or index.html
+    if path and os.path.exists(os.path.join(app.static_folder, path)):
+        return send_from_directory(app.static_folder, path)
+    
+    return send_from_directory(app.static_folder, 'index.html')
 
 # ============= RUN APP =============
 
@@ -548,5 +832,10 @@ if __name__ == '__main__':
         print("✓ Supabase connected")
     else:
         print("✗ Supabase not configured - check .env file")
+    if ml_model:
+        print("✓ ML model loaded")
+    else:
+        print("✗ ML model not loaded")
     print("=" * 50)
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    port = int(os.getenv('PORT', 5000))
+    app.run(debug=True, host='0.0.0.0', port=port)

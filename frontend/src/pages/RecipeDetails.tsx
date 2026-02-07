@@ -3,16 +3,73 @@ import { Sidebar } from '@/components/Sidebar';
 import { useApp } from '@/context/AppContext';
 import { ArrowLeft, Clock, Flame, Users, Star, ThumbsUp, ThumbsDown, Lightbulb, ExternalLink } from 'lucide-react';
 import { recipeAPI } from '@/services/api';
-import { useState } from 'react';
+import { useState, useEffect } from 'react'; // Added useEffect
+import { Recipe } from '@/types/recipe'; // Add Recipe type import
 
 export default function RecipeDetails() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { recipes, likedRecipes, dislikedRecipes, toggleLike, toggleDislike, user } = useApp();
+  const { recipes, likedRecipes, dislikedRecipes, toggleLike, toggleDislike, user, searchResults } = useApp(); // Added searchResults
   const [loading, setLoading] = useState(false);
+  const [recipe, setRecipe] = useState<Recipe | null>(null); // Changed to state
+  const [apiLoading, setApiLoading] = useState(false); // Separate loading state for API
 
-  const recipe = recipes.find(r => r.id === parseInt(id || '0'));
+  useEffect(() => {
+    const loadRecipe = async () => {
+      if (!id) return;
+      
+      const recipeId = parseInt(id || '0');
+      
+      // First try to find in recipes array
+      const foundRecipe = recipes.find(r => r.id === recipeId);
+      
+      if (foundRecipe) {
+        setRecipe(foundRecipe);
+        return;
+      }
+      
+      // If not found in recipes, try searchResults
+      const foundInSearch = searchResults?.find(r => r.id === recipeId);
+      if (foundInSearch) {
+        setRecipe(foundInSearch);
+        return;
+      }
+      
+      // If still not found, fetch from API
+      try {
+        setApiLoading(true);
+        const response = await recipeAPI.getRecipe(recipeId);
+        // Handle different response formats
+        const fetchedRecipe = response.data?.recipe || response.data;
+        if (fetchedRecipe) {
+          setRecipe(fetchedRecipe);
+        }
+      } catch (error) {
+        console.error('Failed to fetch recipe:', error);
+      } finally {
+        setApiLoading(false);
+      }
+    };
+    
+    loadRecipe();
+  }, [id, recipes, searchResults]);
 
+  // Show loading state
+  if (apiLoading) {
+    return (
+      <div className="min-h-screen bg-background">
+        <Sidebar />
+        <main className="ml-64 p-8 flex items-center justify-center">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+            <p className="text-muted-foreground">Loading recipe...</p>
+          </div>
+        </main>
+      </div>
+    );
+  }
+
+  // Show not found state
   if (!recipe) {
     return (
       <div className="min-h-screen bg-background">

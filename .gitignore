@@ -11,11 +11,16 @@ venv/
 .venv/
 env/
 
+# ======================
 # Environment variables (CRITICAL)
+# ======================
 .env
 .env.*
+!.env.example
 
-# Pytest
+# ======================
+# Pytest / Coverage
+# ======================
 .pytest_cache/
 coverage/
 htmlcov/
@@ -29,7 +34,9 @@ frontend/node_modules/
 dist/
 frontend/dist/
 
+# ======================
 # Logs
+# ======================
 *.log
 
 # ======================

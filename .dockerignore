@@ -9,8 +9,10 @@
 # ==============================
 node_modules
 frontend/node_modules
+frontend/.npm
+frontend/.vite
 
-# Build artifacts already copied from builder
+# Build artifacts (rebuilt inside Docker)
 frontend/dist
 
 # ==============================
@@ -29,7 +31,7 @@ venv
 env
 
 # ==============================
-# Tests (VERY IMPORTANT)
+# Tests (NOT included in production image)
 # ==============================
 tests
 backend/tests
@@ -46,7 +48,7 @@ htmlcov
 *.key
 
 # ==============================
-# ML / Data (CRITICAL)
+# ML / Data / Artifacts
 # ==============================
 data
 datasets
@@ -59,14 +61,19 @@ dvc.lock
 .dvc
 
 # ==============================
+# Logs / Runtime
+# ==============================
+*.log
+logs
+
+# ==============================
 # OS junk
 # ==============================
 .DS_Store
 Thumbs.db
 
 # ==============================
-# IDE
+# IDE / Editor
 # ==============================
 .vscode
 .idea
-

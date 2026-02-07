@@ -3,57 +3,98 @@ import { useNavigate } from 'react-router-dom';
 import { Sidebar } from '@/components/Sidebar';
 import { TagInput } from '@/components/TagInput';
 import { useApp } from '@/context/AppContext';
-import { Search, Clock, ChefHat, Globe } from 'lucide-react';
+import { Search, Clock, ChefHat, Globe, Loader2 } from 'lucide-react';
 
 // Common ingredients for recipe requests
 const COMMON_INGREDIENTS = [
-  'Chicken', 'Beef', 'Pork', 'Fish', 'Shrimp', 'Salmon', 'Tuna', 'Eggs',
-  'Milk', 'Butter', 'Cheese', 'Yogurt', 'Cream',
+  'Chicken', 'Beef', 'Pork', 'Fish','Butter', 'Cheese', 'Yogurt', 'Shrimp', 'Salmon', 'Tuna', 'Eggs',
+  'Milk', 'Cream','Oranges', 'Lemons', 'Strawberries', 
   'Rice', 'Pasta', 'Bread', 'Flour', 'Noodles',
   'Tomatoes', 'Onions', 'Garlic', 'Potatoes', 'Carrots', 'Broccoli', 'Spinach', 'Bell Peppers', 'Mushrooms', 'Lettuce', 'Cucumber', 'Zucchini',
-  'Apples', 'Bananas', 'Oranges', 'Lemons', 'Strawberries', 'Blueberries',
+  'Apples', 'Bananas', 'Blueberries',
   'Olive Oil', 'Vegetable Oil', 'Soy Sauce', 'Salt', 'Pepper', 'Sugar', 'Vinegar',
   'Basil', 'Oregano', 'Thyme', 'Rosemary', 'Cilantro', 'Parsley', 'Ginger', 'Cumin', 'Paprika',
   'Beans', 'Lentils', 'Chickpeas', 'Tofu', 'Nuts', 'Almonds', 'Walnuts',
   'Honey', 'Maple Syrup', 'Chocolate', 'Vanilla', 'Cinnamon'
 ];
 
-const CUISINES = ['Any', 'American', 'Italian', 'Mexican', 'Chinese', 'Japanese', 'Indian', 'Mediterranean', 'Thai', 'French'];
+const CUISINES = [  'Any', 
+  'American',
+  'Mexican', 
+  'Italian',
+  'Mediterranean',  // Maps to Greek, Moroccan, Spanish, Middle Eastern
+  'Asian',          // Maps to Chinese, Japanese, Thai, Vietnamese
+  'Indian',
+  'French',
+  'German',
+  'Caribbean',
+  'British'];
 const DIFFICULTIES = ['Any', 'Easy', 'Medium', 'Hard'];
+
+// API configuration
+const API_BASE_URL = 'http://localhost:5000';
 
 export default function RecipeRequest() {
   const navigate = useNavigate();
-  const { recipes, setSearchResults, setLastRequest } = useApp();
+  const { setSearchResults, setLastRequest, user } = useApp();
 
   const [ingredients, setIngredients] = useState<string[]>([]);
   const [cookingTime, setCookingTime] = useState(60);
   const [difficulty, setDifficulty] = useState('Any');
   const [cuisine, setCuisine] = useState('Any');
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setError(null);
+    setIsLoading(true);
 
-    // Simulate ML matching with random scores
-    const results = recipes
-      .filter(recipe => {
-        // Filter by cooking time
-        if (recipe.cook_time_minutes > cookingTime) return false;
+    try {
+      // Make sure user is logged in
+      if (!user || !user.id) {
+        setError('Please log in to search for recipes');
+        setIsLoading(false);
+        return;
+      }
 
-        // Filter by cuisine
-        if (cuisine !== 'Any' && recipe.cuisine.toLowerCase() !== cuisine.toLowerCase()) return false;
+      // Call the backend recommendation API
+      const response = await fetch(`${API_BASE_URL}/api/recommend`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          user_id: user.id,
+          search_ingredients: ingredients,  // ← This is the key ingredient search!
+          preferred_cuisine: cuisine !== 'Any' ? [cuisine] : [],
+          max_cooking_time: cookingTime,
+        })
+      });
 
-        return true;
-      })
-      .map(recipe => ({
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to fetch recommendations');
+      }
+
+      const data = await response.json();
+      
+      // Transform the response to match your app's format
+      const results = data.recipes.map((recipe: any) => ({
         ...recipe,
-        matchScore: Math.floor(Math.random() * 40) + 60 // Random score 60-100
-      }))
-      .sort((a, b) => (b.matchScore || 0) - (a.matchScore || 0))
-      .slice(0, 12);
+        matchScore: Math.round(recipe.ml_score * 100), // Convert 0-1 score to percentage
+      }));
 
-    setSearchResults(results);
-    setLastRequest({ ingredients, cookingTime, difficulty, cuisine });
-    navigate('/recipe-results');
+      setSearchResults(results);
+      setLastRequest({ ingredients, cookingTime, difficulty, cuisine });
+      navigate('/recipe-results');
+
+    } catch (err) {
+      console.error('Search error:', err);
+      setError(err instanceof Error ? err.message : 'Failed to search recipes. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -70,6 +111,13 @@ export default function RecipeRequest() {
               Tell us what you have and we'll suggest the best matches.
             </p>
           </div>
+
+          {/* Error Message */}
+          {error && (
+            <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-800">
+              {error}
+            </div>
+          )}
 
           <form onSubmit={handleSubmit} className="space-y-8">
             {/* Ingredients */}
@@ -89,6 +137,9 @@ export default function RecipeRequest() {
                 suggestions={COMMON_INGREDIENTS}
                 placeholder="Add ingredients..."
               />
+              <p className="text-xs text-muted-foreground mt-2">
+                💡 Tip: Add "Chicken" to find all chicken recipes!
+              </p>
             </div>
 
             {/* Cooking Time */}
@@ -162,10 +213,20 @@ export default function RecipeRequest() {
             {/* Submit */}
             <button
               type="submit"
-              className="w-full py-4 bg-primary text-primary-foreground rounded-xl font-semibold text-lg shadow-soft hover:shadow-elevated transition-all duration-300 flex items-center justify-center gap-2"
+              disabled={isLoading}
+              className="w-full py-4 bg-primary text-primary-foreground rounded-xl font-semibold text-lg shadow-soft hover:shadow-elevated transition-all duration-300 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <Search className="w-5 h-5" />
-              Find Recipes
+              {isLoading ? (
+                <>
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                  Searching...
+                </>
+              ) : (
+                <>
+                  <Search className="w-5 h-5" />
+                  Find Recipes
+                </>
+              )}
             </button>
           </form>
         </div>

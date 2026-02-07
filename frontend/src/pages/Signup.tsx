@@ -7,8 +7,8 @@ import { TagInput } from '@/components/TagInput';
 import { authAPI } from '@/services/api';
 
 const ALLERGIES = ['Dairy', 'Eggs', 'Fish', 'Gluten', 'Lactose', 'Nuts', 'Shellfish', 'Soy', 'Peanuts', 'Tree Nuts', 'Wheat', 'Sesame'];
-const DIETS = ['regular', 'vegetarian', 'vegan', 'keto', 'gluten_free', 'low_carb', 'calorie_deficit', 'diabetic', 'paleo', 'mediterranean'];
-const CONDITIONS = ['Diabetes', 'Heart Disease', 'High Cholesterol', 'Hypertension', 'Celiac Disease', 'IBS', 'Lactose Intolerance', 'GERD'];
+const DIETS = ['regular', 'vegetarian', 'vegan', 'keto', 'gluten_free', 'low_carb', 'calorie_deficit', 'diabetic'];
+const CONDITIONS = ['Diabetes', 'Heart Disease', 'High Cholesterol', 'Hypertension'];
 const COMMON_DISLIKES = [
   'Cilantro', 'Olives', 'Mushrooms', 'Onions', 'Tomatoes', 'Garlic', 'Eggplant', 'Bell Peppers', 
   'Broccoli', 'Cauliflower', 'Brussels Sprouts', 'Cabbage', 'Asparagus', 'Zucchini', 'Spinach', 
