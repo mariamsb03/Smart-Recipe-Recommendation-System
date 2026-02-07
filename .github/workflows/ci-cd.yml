@@ -45,48 +45,18 @@ jobs:
 
 
 # ======================================================
-# 2️⃣ Push → dev : Auto-push to staging
+# 2️⃣ Push → dev : no tests, just validation placeholder
 # ======================================================
   dev-push:
-    name: Dev → Staging Auto-Push
+    name: Dev Branch Push
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/dev' && github.event_name == 'push'
-    
+    if: github.ref == 'refs/heads/dev'
+
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0  # Fetch all history for all branches
-          token: ${{ secrets.AUTO_PUSH_TOKEN }}
-
-      - name: Configure Git
+      - name: Dev push acknowledged
         run: |
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
-
-      - name: Push dev to staging
-        run: |
-          # Fetch staging branch
-          git fetch origin staging
-          
-          # Check if staging already has dev's HEAD
-          if git merge-base --is-ancestor HEAD origin/staging; then
-            echo "✅ staging already contains dev changes"
-          else
-            # Push dev to staging
-            echo "🚀 Pushing dev to staging..."
-            git push origin HEAD:staging --force-with-lease
-            echo "✅ Successfully pushed dev to staging branch"
-          fi
-          
-      - name: Show branch status
-        run: |
-          echo "📊 Branch Status:"
-          echo "Dev branch HEAD:"
-          git log --oneline -1 dev
-          echo ""
-          echo "Staging branch HEAD:"
-          git log --oneline -1 origin/staging
+          echo "✅ Code pushed to dev branch"
+          echo "➡️ Open PR to staging when ready"
 
 
 # ======================================================
