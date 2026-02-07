@@ -44,9 +44,9 @@ COPY --from=frontend-builder /app/frontend/dist ./static
 # Environment
 ENV FLASK_ENV=production
 ENV PYTHONUNBUFFERED=1
-ENV PORT=8080
+ENV PORT=500
 
-EXPOSE 8080
+EXPOSE 5000
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
   CMD curl -f http://localhost:${PORT}/api/health || exit 1
