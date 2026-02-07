@@ -212,13 +212,16 @@ jobs:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
-      - name: Extract metadata
+      - name: Extract metadata with version tags
         id: meta
         uses: docker/metadata-action@v5
         with:
           images: ${{ secrets.DOCKER_USERNAME }}/flavorfit
           tags: |
+            # Version tags
+            type=raw,value=v${{ github.run_number }}  # v1, v2, v3, etc.
             type=raw,value=latest
+            # Branch + SHA for reference
             type=sha,prefix={{branch}}-
 
       - name: Build and push Docker image
@@ -234,12 +237,17 @@ jobs:
       - name: Image info
         run: |
           echo "✅ Docker image built and pushed"
-          echo "📦 Image: ${{ secrets.DOCKER_USERNAME }}/flavorfit:latest"
+          echo "📦 Image: ${{ secrets.DOCKER_USERNAME }}/flavorfit"
+          echo "🏷️  Tags:"
+          echo "${{ steps.meta.outputs.tags }}" | tr ',' '\n' | while read tag; do
+            echo "  - $tag"
+          done
           echo "🔖 SHA: ${{ github.sha }}"
+          echo "🔄 Run #: ${{ github.run_number }}"
 
 
 # ======================================================
-# 5️⃣ Deploy to Railway (Production)
+# 5️⃣ Deploy to Railway (Production) - USING TOKEN
 # ======================================================
   deploy-railway:
     name: Deploy to Railway
@@ -252,27 +260,62 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Trigger Railway Deployment
+      - name: Setup Node.js for Railway CLI
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Install Railway CLI
         run: |
-          curl -X POST "${{ secrets.RAILWAY_DEPLOY_HOOK }}" \
-            -H "Content-Type: application/json" \
-            -d '{}'
+          npm install -g @railway/cli
+
+      - name: Deploy to Railway using CLI
         env:
-          RAILWAY_DEPLOY_HOOK: ${{ secrets.RAILWAY_DEPLOY_HOOK }}
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+        run: |
+          echo "🚂 Deploying to Railway..."
+          
+          # Login with token
+          railway login --token $RAILWAY_TOKEN
+          
+          # Link to project
+          railway link ${{ secrets.RAILWAY_PROJECT_ID }}
+          
+          # Deploy the specific service
+          railway up --service ${{ secrets.RAILWAY_SERVICE_ID }} --detach
+          
+          echo "✅ Deployment initiated!"
 
       - name: Wait for deployment
         run: |
-          echo "⏳ Waiting for Railway to pull and deploy the new image..."
-          sleep 30
+          echo "⏳ Waiting for Railway to deploy (up to 60 seconds)..."
+          sleep 45
 
-      - name: Deployment triggered
+      - name: Check deployment status
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
         run: |
+          echo "📊 Checking deployment status..."
+          
+          # Get latest deployment
+          DEPLOYMENT_INFO=$(curl -s -X GET \
+            -H "Authorization: Bearer $RAILWAY_TOKEN" \
+            -H "Content-Type: application/json" \
+            "https://backboard.railway.app/graphql/v2" \
+            -d '{"query":"query { project(id: \"${{ secrets.RAILWAY_PROJECT_ID }}\") { deployments(first: 1) { edges { node { id status createdAt } } } } }"}')
+          
+          echo "Deployment info: $DEPLOYMENT_INFO"
+          
+          # Try to get service URL
+          SERVICE_URL=$(railway status --service ${{ secrets.RAILWAY_SERVICE_ID }} --json | jq -r '.service.deployments[0].staticUrl // .service.deployments[0].url // "Not available"')
+          
           echo "================================================"
-          echo "🚂 Railway Deployment Triggered!"
+          echo "🚂 Railway Deployment Complete!"
           echo "================================================"
           echo "✅ Docker image: ${{ secrets.DOCKER_USERNAME }}/flavorfit:latest"
-          echo "🌐 Check Railway dashboard for deployment status"
-          echo "📍 Your app: https://your-app.up.railway.app"
+          echo "🌐 Service URL: $SERVICE_URL"
+          echo "📦 Railway Project ID: ${{ secrets.RAILWAY_PROJECT_ID }}"
+          echo "🔧 Service ID: ${{ secrets.RAILWAY_SERVICE_ID }}"
           echo "================================================"
 
 
