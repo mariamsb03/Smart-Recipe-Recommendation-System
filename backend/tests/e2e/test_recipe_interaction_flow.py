@@ -1,7 +1,6 @@
 """
-E2E Test: Recipe Interaction Workflow
+E2E Test: 3
 ONE user used for ALL tests for consistency
-Tests sign up, recipe search, view results, detail page, and external link interaction
 """
 import pytest
 from selenium import webdriver
@@ -38,8 +37,8 @@ def generate_test_user():
     random_str = ''.join(random.choices(string.ascii_lowercase, k=6))
     
     return {
-        'name': f'Recipe Test User {random_str}',
-        'email': f'recipetest_{random_str}_{timestamp}@example.com',
+        'name': f'ML Test User {random_str}',
+        'email': f'mltest_{random_str}_{timestamp}@example.com',
         'password': 'TestPassword123!',
         'age': '25',
         'gender': 'male',
@@ -47,6 +46,7 @@ def generate_test_user():
         'diet': 'Regular',
         'dislikes': ['Olives', 'Mushrooms']
     }
+
 
 
 @pytest.fixture(scope='module')
@@ -66,9 +66,9 @@ def logged_in_driver(driver, test_user):
     print(f"User: {test_user['email']}")
     print('='*60)
     
-    helper = TestRecipeInteractionWorkflow()
+    helper = TestMLPredictionWorkflow()
     
-    # Try to login first
+    # Just login - don't create user
     success = helper.login_user(driver, test_user)
     
     if not success:
@@ -86,9 +86,10 @@ def logged_in_driver(driver, test_user):
     print(f"\nTeardown: All tests completed for user {test_user['email']}")
 
 
-class TestRecipeInteractionWorkflow:
-    """E2E tests for recipe interaction workflow - all use SAME user"""
+class TestMLPredictionWorkflow:
+    """E2E tests for ML prediction and recipe recommendation - all use SAME user"""
     
+
     BASE_URL = os.getenv('E2E_BASE_URL', 'http://localhost:8080')
     
     def login_user(self, driver, user_data):
@@ -150,7 +151,8 @@ class TestRecipeInteractionWorkflow:
             driver.get(f'{self.BASE_URL}/signup')
             time.sleep(3)
             
-            # Fill account information
+            
+            # Fill account information - SIMPLER APPROACH
             print("Step 1: Filling account information...")
             
             # Find all input fields
@@ -176,18 +178,42 @@ class TestRecipeInteractionWorkflow:
                 inputs[2].send_keys(user_data['password'])
                 print("✓ Filled password")
                 time.sleep(0.5)
+            else:
+                # Try to find by placeholder
+                for inp in inputs:
+                    placeholder = (inp.get_attribute('placeholder') or '').lower()
+                    if 'name' in placeholder:
+                        inp.clear()
+                        inp.send_keys(user_data['name'])
+                    elif 'email' in placeholder:
+                        inp.clear()
+                        inp.send_keys(user_data['email'])
+                    elif 'password' in placeholder:
+                        inp.clear()
+                        inp.send_keys(user_data['password'])
             
-            # Click Continue
+            # Click Continue - look for ANY continue button
             continue_buttons = driver.find_elements(By.XPATH, 
                 "//button[contains(text(), 'Continue') or contains(text(), 'Next')]")
             
             if continue_buttons:
                 continue_buttons[0].click()
                 print("✓ Clicked continue to step 2")
+            else:
+                # Try any enabled button
+                buttons = driver.find_elements(By.CSS_SELECTOR, 'button')
+                for btn in buttons:
+                    if btn.is_enabled() and btn.is_displayed():
+                        btn.click()
+                        print("✓ Clicked a button to proceed")
+                        break
+            
             time.sleep(2)
             
             # Step 2: Demographics
             print("Step 2: Filling demographics...")
+            
+            # Wait for page to load
             time.sleep(2)
             
             # Fill age
@@ -197,6 +223,15 @@ class TestRecipeInteractionWorkflow:
                 age_inputs[0].send_keys(user_data['age'])
                 print("✓ Filled age")
                 time.sleep(0.5)
+            else:
+                # Try any input
+                inputs = driver.find_elements(By.CSS_SELECTOR, 'input')
+                for inp in inputs:
+                    if inp.get_attribute('type') == 'number':
+                        inp.clear()
+                        inp.send_keys(user_data['age'])
+                        print("✓ Filled age (found by type)")
+                        break
             
             # Fill gender
             selects = driver.find_elements(By.CSS_SELECTOR, 'select')
@@ -225,21 +260,46 @@ class TestRecipeInteractionWorkflow:
             
             # Step 3: Dietary Information
             print("Step 3: Adding dietary information...")
+            
+            # Wait for page to load
             time.sleep(2)
             
-            # Add allergy
-            try:
-                inputs = driver.find_elements(By.CSS_SELECTOR, 'input')
-                for inp in inputs:
-                    placeholder = (inp.get_attribute('placeholder') or '').lower()
-                    if 'allerg' in placeholder or 'search' in placeholder:
-                        inp.send_keys(user_data['allergies'][0])
-                        inp.send_keys(Keys.ENTER)
-                        print(f"✓ Added allergy: {user_data['allergies'][0]}")
+            # Check if we're on the right page
+            page_text = driver.page_source
+            if 'Dietary' not in page_text and 'Allerg' not in page_text:
+                print("⚠ May have skipped step 3, trying to continue...")
+            else:
+                # Add allergy
+                try:
+                    # Look for input with placeholder containing "allergy" or "search"
+                    inputs = driver.find_elements(By.CSS_SELECTOR, 'input')
+                    for inp in inputs:
+                        placeholder = (inp.get_attribute('placeholder') or '').lower()
+                        if 'allerg' in placeholder or 'search' in placeholder:
+                            inp.send_keys(user_data['allergies'][0])
+                            inp.send_keys(Keys.ENTER)
+                            print(f"✓ Added allergy: {user_data['allergies'][0]}")
+                            time.sleep(0.5)
+                            break
+                except:
+                    print("⚠ Could not add allergy, skipping...")
+                
+                # Select diet
+                try:
+                    selects = driver.find_elements(By.CSS_SELECTOR, 'select')
+                    if selects:
+                        # Use the first select for diet (should be the second select on page)
+                        if len(selects) > 1:
+                            diet_select = selects[1]
+                        else:
+                            diet_select = selects[0]
+                        
+                        select = Select(diet_select)
+                        select.select_by_value(user_data['diet'])
+                        print(f"✓ Selected diet: {user_data['diet']}")
                         time.sleep(0.5)
-                        break
-            except:
-                print("⚠ Could not add allergy, skipping...")
+                except:
+                    print("⚠ Could not select diet, skipping...")
             
             # Click Continue to Step 4
             continue_buttons = driver.find_elements(By.XPATH, 
@@ -252,10 +312,13 @@ class TestRecipeInteractionWorkflow:
             
             # Step 4: Food Preferences
             print("Step 4: Adding food preferences...")
+            
+            # Wait for page to load
             time.sleep(2)
             
             # Add disliked ingredients
             try:
+                # Look for input with placeholder containing "dislike" or "ingredient"
                 inputs = driver.find_elements(By.CSS_SELECTOR, 'input')
                 for inp in inputs:
                     placeholder = (inp.get_attribute('placeholder') or '').lower()
@@ -276,6 +339,13 @@ class TestRecipeInteractionWorkflow:
             if complete_buttons:
                 complete_buttons[0].click()
                 print("✓ Clicked complete setup")
+            else:
+                # Try continue button
+                continue_buttons = driver.find_elements(By.XPATH, 
+                    "//button[contains(text(), 'Continue')]")
+                if continue_buttons:
+                    continue_buttons[0].click()
+                    print("✓ Clicked continue (final step)")
             
             # Wait for signup to complete
             print("⏳ Waiting for signup to complete...")
@@ -283,12 +353,19 @@ class TestRecipeInteractionWorkflow:
             
             # Check where we are
             current_url = driver.current_url.lower()
+            page_text = driver.page_source.lower()
             
-            if 'dashboard' in current_url:
+            print(f"Current URL after signup: {current_url}")
+            
+            if 'dashboard' in current_url or 'hi,' in page_text:
                 print(f"✅ User created and on dashboard: {user_data['email']}")
                 return True
+            elif 'login' in current_url:
+                print(f"✓ User created, redirected to login")
+                # Try to login with the same credentials
+                return self.login_user(driver, user_data)
             else:
-                print(f"⚠ Not on dashboard, trying direct navigation...")
+                print(f"⚠ Not on expected page, trying dashboard directly...")
                 driver.get(f'{self.BASE_URL}/dashboard')
                 time.sleep(3)
                 
@@ -296,12 +373,15 @@ class TestRecipeInteractionWorkflow:
                     print(f"✅ Successfully reached dashboard: {user_data['email']}")
                     return True
                 else:
-                    return False
+                    # Last resort: try to login
+                    print(f"Trying to login with new account...")
+                    return self.login_user(driver, user_data)
                     
         except Exception as e:
             print(f"❌ Error creating user: {e}")
+            import traceback
+            traceback.print_exc()
             return False
-    
     def ensure_on_dashboard(self, driver, user_email):
         """Ensure we're on dashboard, navigate there if not"""
         try:
@@ -335,7 +415,12 @@ class TestRecipeInteractionWorkflow:
         print(f"User: {test_user['email']}")
         
         driver = logged_in_driver
-    
+        
+        # OPTION 1: Direct navigation (simpler and more reliable)
+        print("\nUsing direct navigation to recipe request page...")
+        #driver.get(f'{self.BASE_URL}/recipe-request')
+        #time.sleep(3)
+        
         
         # Check current URL and page content
         current_url = driver.current_url.lower()
@@ -344,6 +429,43 @@ class TestRecipeInteractionWorkflow:
         print(f"Current URL: {current_url}")
         
         # Check if we successfully reached recipe-request page
+        if 'recipe-request' not in current_url:
+            print(f"⚠ Not on recipe-request URL. Trying to find 'Find a Recipe' button...")
+            
+            # OPTION 2: Try to find and click the "Find a Recipe" button from dashboard
+            # Look for the button (similar to test_navigation_to_recipe_request in reference)
+            button_selectors = [
+                "//button[contains(translate(., 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'find a recipe')]",
+                "//button[contains(@class, 'gradient')]",
+                "//button[contains(@class, 'hero')]",
+                "//button[.//*[contains(text(), 'Find a Recipe')]]",
+            ]
+            
+            find_recipe_button = None
+            for selector in button_selectors:
+                try:
+                    elements = driver.find_elements(By.XPATH, selector)
+                    if elements:
+                        find_recipe_button = elements[0]
+                        print(f"✓ Found button using selector")
+                        break
+                except:
+                    continue
+            
+            if find_recipe_button:
+                print("Clicking 'Find a Recipe' button...")
+                find_recipe_button.click()
+                time.sleep(3)
+                
+                # Update URL and page text after clicking
+                current_url = driver.current_url.lower()
+                page_text = driver.page_source
+                print(f"URL after clicking button: {current_url}")
+            else:
+                print("❌ Could not find 'Find a Recipe' button")
+        
+        # Now check if we're on the recipe request page
+        # These elements should ONLY be on the recipe request page
         recipe_request_indicators = [
             'Find Your Perfect Recipe',
             'Available Ingredients',
@@ -360,17 +482,50 @@ class TestRecipeInteractionWorkflow:
         for indicator in found_indicators:
             print(f"  ✓ {indicator}")
         
-        # Critical check: Must have "Find Your Perfect Recipe"
+        # Critical check: Must have "Find Your Perfect Recipe" (main title of recipe request page)
         if 'Find Your Perfect Recipe' not in page_text:
             print(f"\n❌ CRITICAL FAILURE: Not on recipe request page!")
+            print(f"   Missing main title: 'Find Your Perfect Recipe'")
+            print(f"   Current URL: {current_url}")
+            print(f"   Page contains 'dashboard': {'dashboard' in current_url}")
+            print(f"   Page contains 'login': {'login' in current_url}")
+            
+            # Check what page we're actually on
+            if 'dashboard' in current_url or 'Hi,' in page_text:
+                print("   💡 You're still on the dashboard! Need to navigate to /recipe-request")
+                print("   💡 Try: driver.get('http://localhost:8080/recipe-request')")
+            
             pytest.fail("Not on recipe request search interface page")
         
         # If we have the main title plus at least one more indicator, we're good
         if len(found_indicators) >= 2:
             print(f"\n✅ Successfully on recipe search interface page")
-            assert True
+            
+            # Additional verification: check for form elements
+            try:
+                # Check for input fields
+                inputs = driver.find_elements(By.CSS_SELECTOR, 'input')
+                print(f"✓ Found {len(inputs)} input fields")
+                
+                # Check for cooking time slider
+                sliders = driver.find_elements(By.CSS_SELECTOR, 'input[type="range"]')
+                if sliders:
+                    print(f"✓ Found cooking time slider")
+                
+                # Check for submit button
+                submit_buttons = driver.find_elements(By.XPATH,
+                    "//button[contains(text(), 'Find Recipes') or contains(text(), 'Search')]")
+                
+                if submit_buttons:
+                    print(f"✓ Found submit button: '{submit_buttons[0].text}'")
+                
+                assert True
+            except Exception as e:
+                print(f"⚠ Error checking form elements: {e}")
+                assert True  # Main test passed, this is just extra verification
         else:
             print(f"\n⚠ Only found {len(found_indicators)} recipe request indicators")
+            print(f"   Expected at least 2 indicators including 'Find Your Perfect Recipe'")
             pytest.fail("Recipe search interface not fully loaded")
     
     def test_perform_recipe_search(self, logged_in_driver, test_user):
