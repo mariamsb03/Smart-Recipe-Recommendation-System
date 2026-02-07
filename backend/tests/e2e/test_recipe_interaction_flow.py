@@ -55,19 +55,23 @@ def test_user():
 
 @pytest.fixture(scope='module')
 def logged_in_driver(driver, test_user):
-    """Login ONE user at the beginning"""
+    """
+    Login ONE user at the beginning
+    All tests will use this logged-in session
+    """
     print(f"\n{'='*60}")
-    print("SETUP: Recipe Interaction Test - Logging in user")
+    print("SETUP: Logging in ONE test user for ALL tests")
     print(f"User: {test_user['email']}")
     print('='*60)
     
     helper = TestRecipeInteractionWorkflow()
     
-    # Try to login first
+    # Just login - don't create user
     success = helper.login_user(driver, test_user)
     
     if not success:
-        print(f"⚠ Could not login, creating new user...")
+        print(f"⚠ Could not login user {test_user['email']}, trying to create...")
+        # Try to create user if login fails
         success = helper.create_and_login_user(driver, test_user)
     
     if not success:
@@ -75,9 +79,9 @@ def logged_in_driver(driver, test_user):
     
     print(f"✅ Setup complete. User logged in: {test_user['email']}")
     
-    yield driver
+    yield driver  # All tests will use this driver with logged-in user
     
-    print(f"\nTeardown: Recipe interaction tests completed")
+    print(f"\nTeardown: All tests completed for user {test_user['email']}")
 
 
 class TestRecipeInteractionWorkflow:
@@ -117,15 +121,15 @@ class TestRecipeInteractionWorkflow:
             current_url = driver.current_url
             
             if 'dashboard' in current_url:
-                print(f"✅ Login successful")
+                print(f"✅ Login successful: {user_data['email']}")
                 return True
             else:
                 page_text = driver.page_source
                 if 'Dashboard' in page_text or 'Hi,' in page_text:
-                    print(f"✅ Login successful")
+                    print(f"✅ Login successful: {user_data['email']}")
                     return True
                 else:
-                    print(f"✗ Login failed")
+                    print(f"✗ Login failed for: {user_data['email']}")
                     return False
                     
         except Exception as e:
@@ -133,45 +137,239 @@ class TestRecipeInteractionWorkflow:
             return False
     
     def create_and_login_user(self, driver, user_data):
-        """Create a new user - simplified version"""
+        """Create a new user and login - returns True if successful"""
         try:
             print(f"👤 Creating user: {user_data['email']}")
             
+            # Clear cookies and start fresh
             driver.delete_all_cookies()
+            
+            # Step 1: Signup
             driver.get(f'{self.BASE_URL}/signup')
             time.sleep(3)
             
-            # Step 1: Account info
-            inputs = driver.find_elements(By.CSS_SELECTOR, 'input')
-            if len(inputs) >= 3:
-                inputs[0].send_keys(user_data['name'])
-                inputs[1].send_keys(user_data['email'])
-                inputs[2].send_keys(user_data['password'])
+            print("Step 1: Filling account information...")
             
-            continue_btn = driver.find_element(By.XPATH, "//button[contains(text(), 'Continue')]")
-            continue_btn.click()
+            # Find all input fields
+            inputs = driver.find_elements(By.CSS_SELECTOR, 'input')
+            print(f"Found {len(inputs)} input fields")
+            
+            # Fill them in order (usually: name, email, password)
+            if len(inputs) >= 3:
+                # Name
+                inputs[0].clear()
+                inputs[0].send_keys(user_data['name'])
+                print("✓ Filled name")
+                time.sleep(0.5)
+                
+                # Email
+                inputs[1].clear()
+                inputs[1].send_keys(user_data['email'])
+                print("✓ Filled email")
+                time.sleep(0.5)
+                
+                # Password
+                inputs[2].clear()
+                inputs[2].send_keys(user_data['password'])
+                print("✓ Filled password")
+                time.sleep(0.5)
+            else:
+                # Try to find by placeholder
+                for inp in inputs:
+                    placeholder = (inp.get_attribute('placeholder') or '').lower()
+                    if 'name' in placeholder:
+                        inp.clear()
+                        inp.send_keys(user_data['name'])
+                    elif 'email' in placeholder:
+                        inp.clear()
+                        inp.send_keys(user_data['email'])
+                    elif 'password' in placeholder:
+                        inp.clear()
+                        inp.send_keys(user_data['password'])
+            
+            # Click Continue
+            continue_buttons = driver.find_elements(By.XPATH, 
+                "//button[contains(text(), 'Continue') or contains(text(), 'Next')]")
+            
+            if continue_buttons:
+                continue_buttons[0].click()
+                print("✓ Clicked continue to step 2")
+            else:
+                # Try any enabled button
+                buttons = driver.find_elements(By.CSS_SELECTOR, 'button')
+                for btn in buttons:
+                    if btn.is_enabled() and btn.is_displayed():
+                        btn.click()
+                        print("✓ Clicked a button to proceed")
+                        break
+            
             time.sleep(2)
             
-            # Complete remaining steps quickly
-            for _ in range(3):
-                try:
-                    continue_btn = driver.find_element(By.XPATH, "//button[contains(text(), 'Continue') or contains(text(), 'Complete')]")
-                    continue_btn.click()
-                    time.sleep(2)
-                except:
-                    break
+            # Step 2: Demographics
+            print("Step 2: Filling demographics...")
+            time.sleep(2)
             
-            time.sleep(3)
-            
-            # Check if on dashboard
-            if 'dashboard' in driver.current_url.lower():
-                print("✅ User created and logged in")
-                return True
+            # Fill age
+            age_inputs = driver.find_elements(By.CSS_SELECTOR, 'input[type="number"], input[placeholder*="age"], input[placeholder*="Age"]')
+            if age_inputs:
+                age_inputs[0].clear()
+                age_inputs[0].send_keys(user_data['age'])
+                print("✓ Filled age")
+                time.sleep(0.5)
             else:
-                return 'Hi,' in driver.page_source
+                # Try any input
+                inputs = driver.find_elements(By.CSS_SELECTOR, 'input')
+                for inp in inputs:
+                    if inp.get_attribute('type') == 'number':
+                        inp.clear()
+                        inp.send_keys(user_data['age'])
+                        print("✓ Filled age (found by type)")
+                        break
+            
+            # Fill gender
+            selects = driver.find_elements(By.CSS_SELECTOR, 'select')
+            if selects:
+                try:
+                    select = Select(selects[0])
+                    select.select_by_value(user_data['gender'])
+                    print(f"✓ Selected gender: {user_data['gender']}")
+                except:
+                    try:
+                        select.select_by_visible_text('Male')
+                        print("✓ Selected gender: Male")
+                    except:
+                        try:
+                            select.select_by_index(1)
+                            print("✓ Selected gender (by index)")
+                        except:
+                            print("⚠ Could not select gender")
+                time.sleep(0.5)
+            
+            # Click Continue to Step 3
+            continue_buttons = driver.find_elements(By.XPATH, 
+                "//button[contains(text(), 'Continue') or contains(text(), 'Next')]")
+            
+            if continue_buttons:
+                continue_buttons[0].click()
+                print("✓ Clicked continue to step 3")
+            time.sleep(2)
+            
+            # Step 3: Dietary Information
+            print("Step 3: Adding dietary information...")
+            time.sleep(2)
+            
+            page_text = driver.page_source
+            if 'Dietary' not in page_text and 'Allerg' not in page_text:
+                print("⚠ May have skipped step 3, trying to continue...")
+            else:
+                # Add allergy
+                try:
+                    inputs = driver.find_elements(By.CSS_SELECTOR, 'input')
+                    for inp in inputs:
+                        placeholder = (inp.get_attribute('placeholder') or '').lower()
+                        if 'allerg' in placeholder or 'search' in placeholder:
+                            inp.send_keys(user_data['allergies'][0])
+                            inp.send_keys(Keys.ENTER)
+                            print(f"✓ Added allergy: {user_data['allergies'][0]}")
+                            time.sleep(0.5)
+                            break
+                except:
+                    print("⚠ Could not add allergy, skipping...")
                 
+                # Select diet
+                try:
+                    selects = driver.find_elements(By.CSS_SELECTOR, 'select')
+                    if selects:
+                        # Use the first select for diet (should be the second select on page)
+                        if len(selects) > 1:
+                            diet_select = selects[1]
+                        else:
+                            diet_select = selects[0]
+                        
+                        select = Select(diet_select)
+                        select.select_by_value(user_data['diet'])
+                        print(f"✓ Selected diet: {user_data['diet']}")
+                        time.sleep(0.5)
+                except:
+                    print("⚠ Could not select diet, skipping...")
+            
+            # Click Continue to Step 4
+            continue_buttons = driver.find_elements(By.XPATH, 
+                "//button[contains(text(), 'Continue') or contains(text(), 'Next')]")
+            
+            if continue_buttons:
+                continue_buttons[0].click()
+                print("✓ Clicked continue to step 4")
+            time.sleep(2)
+            
+            # Step 4: Food Preferences
+            print("Step 4: Adding food preferences...")
+            time.sleep(2)
+            
+            # Add disliked ingredients
+            try:
+                inputs = driver.find_elements(By.CSS_SELECTOR, 'input')
+                for inp in inputs:
+                    placeholder = (inp.get_attribute('placeholder') or '').lower()
+                    if 'dislike' in placeholder or 'ingredient' in placeholder or 'search' in placeholder:
+                        for dislike in user_data['dislikes']:
+                            inp.send_keys(dislike)
+                            inp.send_keys(Keys.ENTER)
+                            print(f"✓ Added dislike: {dislike}")
+                            time.sleep(0.3)
+                        break
+            except:
+                print("⚠ Could not add dislikes, skipping...")
+            
+            # Complete setup
+            complete_buttons = driver.find_elements(By.XPATH, 
+                "//button[contains(text(), 'Complete Setup') or contains(text(), 'Finish') or contains(text(), 'Create Account')]")
+            
+            if complete_buttons:
+                complete_buttons[0].click()
+                print("✓ Clicked complete setup")
+            else:
+                # Try continue button
+                continue_buttons = driver.find_elements(By.XPATH, 
+                    "//button[contains(text(), 'Continue')]")
+                if continue_buttons:
+                    continue_buttons[0].click()
+                    print("✓ Clicked continue (final step)")
+            
+            # Wait for signup to complete
+            print("⏳ Waiting for signup to complete...")
+            time.sleep(5)
+            
+            # Check where we are
+            current_url = driver.current_url.lower()
+            page_text = driver.page_source.lower()
+            
+            print(f"Current URL after signup: {current_url}")
+            
+            if 'dashboard' in current_url or 'hi,' in page_text:
+                print(f"✅ User created and on dashboard: {user_data['email']}")
+                return True
+            elif 'login' in current_url:
+                print(f"✓ User created, redirected to login")
+                # Try to login with the same credentials
+                return self.login_user(driver, user_data)
+            else:
+                print(f"⚠ Not on expected page, trying dashboard directly...")
+                driver.get(f'{self.BASE_URL}/dashboard')
+                time.sleep(3)
+                
+                if 'dashboard' in driver.current_url.lower():
+                    print(f"✅ Successfully reached dashboard: {user_data['email']}")
+                    return True
+                else:
+                    # Last resort: try to login
+                    print(f"Trying to login with new account...")
+                    return self.login_user(driver, user_data)
+                    
         except Exception as e:
-            print(f"❌ Signup error: {e}")
+            print(f"❌ Error creating user: {e}")
+            import traceback
+            traceback.print_exc()
             return False
 
     def test_click_recipe_from_dashboard(self, logged_in_driver, test_user):
