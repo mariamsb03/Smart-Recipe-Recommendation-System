@@ -20,6 +20,25 @@ app = Flask(__name__, static_folder='static', static_url_path='')
 app.config['SECRET_KEY'] = os.getenv('FLASK_SECRET_KEY', 'dev-secret-key')
 CORS(app)
 
+# Redirect legacy /signup to /api/auth/signup
+@app.route('/signup', methods=['POST'])
+def legacy_signup():
+    """Redirect /signup POST requests to /api/auth/signup"""
+    return signup()
+
+@app.route('/login', methods=['POST'])
+def legacy_login():
+    """Redirect /login POST requests to /api/auth/login"""
+    return login()
+
+# Serve frontend for GET requests to these pages
+@app.route('/signup', methods=['GET'])
+@app.route('/login', methods=['GET'])
+def serve_auth_pages():
+    """Serve frontend for GET /signup and /login"""
+    return send_from_directory(app.static_folder, 'index.html')
+
+
 MLFLOW_URI = os.getenv('MLFLOW_TRACKING_URI', 'http://127.0.0.1:5001')
 MLFLOW_EXPERIMENT = os.getenv('MLFLOW_EXPERIMENT', 'FlavorFit-Recommendation')
 
