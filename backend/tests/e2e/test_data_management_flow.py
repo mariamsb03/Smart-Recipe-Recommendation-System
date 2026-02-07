@@ -14,6 +14,8 @@ import time
 import random
 import string
 from datetime import datetime
+import os
+
 
 
 @pytest.fixture(scope='module')
@@ -81,7 +83,7 @@ def logged_in_driver(driver, test_user):
 class TestDataManagementCRUD:
     """E2E tests for data management - all use the SAME user"""
     
-    BASE_URL = 'http://localhost:8080'
+    BASE_URL = os.getenv('E2E_BASE_URL', 'http://localhost:8080')
     
     def create_and_login_user(self, driver, user_data):
         """Create a new user and login - returns True if successful"""
