@@ -45,18 +45,48 @@ jobs:
 
 
 # ======================================================
-# 2️⃣ Push → dev : no tests, just validation placeholder
+# 2️⃣ Push → dev : Auto-push to staging
 # ======================================================
   dev-push:
-    name: Dev Branch Push
+    name: Dev → Staging Auto-Push
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/dev'
-
+    if: github.ref == 'refs/heads/dev' && github.event_name == 'push'
+    
     steps:
-      - name: Dev push acknowledged
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Fetch all history for all branches
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure Git
         run: |
-          echo "✅ Code pushed to dev branch"
-          echo "➡️ Open PR to staging when ready"
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Push dev to staging
+        run: |
+          # Fetch staging branch
+          git fetch origin staging
+          
+          # Check if staging already has dev's HEAD
+          if git merge-base --is-ancestor HEAD origin/staging; then
+            echo "✅ staging already contains dev changes"
+          else
+            # Push dev to staging
+            echo "🚀 Pushing dev to staging..."
+            git push origin HEAD:staging --force-with-lease
+            echo "✅ Successfully pushed dev to staging branch"
+          fi
+          
+      - name: Show branch status
+        run: |
+          echo "📊 Branch Status:"
+          echo "Dev branch HEAD:"
+          git log --oneline -1 dev
+          echo ""
+          echo "Staging branch HEAD:"
+          git log --oneline -1 origin/staging
 
 
 # ======================================================
@@ -103,7 +133,33 @@ jobs:
         run: |
           pytest backend/tests/integration -v
 
-      - name: Run end-to-end tests
+      - name: Install Chrome and ChromeDriver for E2E tests
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y wget unzip xvfb
+          
+          # Install Chrome
+          wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | sudo apt-key add -
+          echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" | sudo tee /etc/apt/sources.list.d/google-chrome.list
+          sudo apt-get update
+          sudo apt-get install -y google-chrome-stable
+          
+          # Install ChromeDriver
+          CHROME_VERSION=$(google-chrome --version | grep -o '[0-9]\+\.[0-9]\+\.[0-9]\+\.[0-9]\+' | head -1)
+          CHROME_MAJOR_VERSION=$(echo $CHROME_VERSION | cut -d'.' -f1)
+          
+          # Get compatible ChromeDriver
+          CHROME_DRIVER_VERSION=$(curl -sS https://chromedriver.storage.googleapis.com/LATEST_RELEASE_${CHROME_MAJOR_VERSION})
+          wget -N https://chromedriver.storage.googleapis.com/${CHROME_DRIVER_VERSION}/chromedriver_linux64.zip
+          unzip chromedriver_linux64.zip
+          sudo mv chromedriver /usr/local/bin/chromedriver
+          sudo chmod +x /usr/local/bin/chromedriver
+          
+          # Verify installations
+          echo "Chrome version: $(google-chrome --version)"
+          echo "ChromeDriver version: $(chromedriver --version)"
+
+      - name: Run end-to-end tests with Xvfb
         env:
           FLASK_ENV: ${{ secrets.FLASK_ENV }}
           SECRET_KEY: ${{ secrets.SECRET_KEY }}
@@ -111,7 +167,8 @@ jobs:
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
           MLFLOW_TRACKING_URI: ${{ secrets.MLFLOW_TRACKING_URI }}
         run: |
-          pytest backend/tests/e2e -v
+          # Run tests with virtual display
+          xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" python -m pytest backend/tests/e2e -v
 
 
 # ======================================================
