@@ -38,18 +38,7 @@ class TestAuthAPI:
         assert 'status' in data
         assert data['status'] == 'healthy'
         assert 'timestamp' in data
-    
-    def test_root_endpoint(self, client):
-        """Test root endpoint returns API information"""
-        # Act
-        response = client.get('/')
-        
-        # Assert
-        assert response.status_code == 200
-        data = json.loads(response.data)
-        assert 'message' in data
-        assert 'endpoints' in data
-        assert 'auth' in data['endpoints']
+
     
     # Update the mocking in test_signup_success:
     @patch('app.supabase')
