@@ -116,16 +116,16 @@ jobs:
           tail -20 flask.log
           curl -f http://localhost:5000/health || echo "Health check failed, but continuing..."
 
-      - name: Start Frontend Development Server
+      - name: Start Frontend Development Server on port 8080
         run: |
           cd frontend
-          # Start in background
-          nohup npm run dev > react.log 2>&1 &
-          echo "✅ Frontend dev server starting..."
-          sleep 15  # Give React time to build and start
-          echo "Frontend logs:"
-          tail -20 react.log
-          curl -f http://localhost:5173 || echo "Frontend might still be starting..."
+          # Set port to 8080 for Vite
+          echo "VITE_PORT=8080" > .env
+          PORT=8080 nohup npm run dev > react.log 2>&1 &
+          echo "✅ Frontend starting on port 8080..."
+          sleep 25  # Vite needs more time on first build
+          echo "Checking if frontend is up:"
+          curl -s -o /dev/null -w "%{http_code}" http://localhost:8080 || echo "Not ready"
 
       # -------- Run Backend Tests --------
       - name: Run backend unit tests
@@ -176,18 +176,16 @@ jobs:
       # -------- Run E2E Tests --------
       - name: Run end-to-end tests
         env:
-          # IMPORTANT: Update BASE_URL to use frontend port (5173 for Vite dev server)
-          BASE_URL: "http://localhost:5173"
+          E2E_BASE_URL: "http://localhost:8080"  # Match the frontend port
           FLASK_ENV: ${{ secrets.FLASK_ENV }}
           SECRET_KEY: ${{ secrets.SECRET_KEY }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
           MLFLOW_TRACKING_URI: ${{ secrets.MLFLOW_TRACKING_URI }}
         run: |
-          echo "Running E2E tests against: $BASE_URL"
-          echo "Backend API should be at: http://localhost:5000"
+          echo "Running E2E tests against: $E2E_BASE_URL"
           # Run tests with virtual display
-          xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" python -m pytest backend/tests/e2e -v
+          xvfb-run --auto-serternum --server-args="-screen 0 1920x1080x24" python -m pytest backend/tests/e2e -v
 
 # ======================================================
 # 4️⃣ Push → main : Build & push ONE Docker image
