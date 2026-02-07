@@ -186,11 +186,12 @@ jobs:
       - name: Start Frontend Development Server on port 8080
         run: |
           cd frontend
-          # Set port to 8080 for Vite
-          echo "VITE_PORT=8080" > .env
+          # Create .env file for testing with local API
+          echo "VITE_API_URL=http://localhost:5000/api" > .env
+          echo "VITE_PORT=8080" >> .env
           PORT=8080 nohup npm run dev > react.log 2>&1 &
-          echo "✅ Frontend starting on port 8080..."
-          sleep 25  # Vite needs more time on first build
+          echo "✅ Frontend starting on port 8080 with local API..."
+          sleep 25
           echo "Checking if frontend is up:"
           curl -s -o /dev/null -w "%{http_code}" http://localhost:8080 || echo "Not ready"
 
@@ -328,6 +329,8 @@ jobs:
           tags: ${{ secrets.DOCKER_USERNAME }}/flavorfit:v${{ steps.version.outputs.next_version }}
           cache-from: type=registry,ref=${{ secrets.DOCKER_USERNAME }}/flavorfit:buildcache
           cache-to: type=registry,ref=${{ secrets.DOCKER_USERNAME }}/flavorfit:buildcache,mode=max
+          build-args: |  # ✅ ADD THIS SECTION
+            VITE_API_URL=https://flavorfit-production-83c1.up.railway.app/api
 
       - name: Image info
         run: |
