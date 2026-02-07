@@ -103,31 +103,15 @@ jobs:
         run: |
           pytest backend/tests/integration -v
 
-      - name: Install Chrome and ChromeDriver for E2E tests
+      - name: Setup Chrome
+        uses: browser-actions/setup-chrome@v1
+        with:
+          chrome-version: stable
+
+      - name: Setup ChromeDriver
         run: |
-          sudo apt-get update
-          sudo apt-get install -y wget unzip xvfb
-          
-          # Install Chrome
-          wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | sudo apt-key add -
-          echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" | sudo tee /etc/apt/sources.list.d/google-chrome.list
-          sudo apt-get update
-          sudo apt-get install -y google-chrome-stable
-          
-          # Install ChromeDriver
-          CHROME_VERSION=$(google-chrome --version | grep -o '[0-9]\+\.[0-9]\+\.[0-9]\+\.[0-9]\+' | head -1)
-          CHROME_MAJOR_VERSION=$(echo $CHROME_VERSION | cut -d'.' -f1)
-          
-          # Get compatible ChromeDriver
-          CHROME_DRIVER_VERSION=$(curl -sS https://chromedriver.storage.googleapis.com/LATEST_RELEASE_${CHROME_MAJOR_VERSION})
-          wget -N https://chromedriver.storage.googleapis.com/${CHROME_DRIVER_VERSION}/chromedriver_linux64.zip
-          unzip chromedriver_linux64.zip
-          sudo mv chromedriver /usr/local/bin/chromedriver
-          sudo chmod +x /usr/local/bin/chromedriver
-          
-          # Verify installations
-          echo "Chrome version: $(google-chrome --version)"
-          echo "ChromeDriver version: $(chromedriver --version)"
+          # ChromeDriver is installed automatically with the Chrome action
+          chromedriver --version
 
       - name: Run end-to-end tests with Xvfb
         env:
