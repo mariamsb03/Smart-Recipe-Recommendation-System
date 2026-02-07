@@ -335,11 +335,7 @@ class TestRecipeInteractionWorkflow:
         print(f"User: {test_user['email']}")
         
         driver = logged_in_driver
-        
-        # Direct navigation to recipe request page
-        print("\nUsing direct navigation to recipe request page...")
-        driver.get(f'{self.BASE_URL}/recipe-request')
-        time.sleep(3)
+    
         
         # Check current URL and page content
         current_url = driver.current_url.lower()
@@ -384,11 +380,6 @@ class TestRecipeInteractionWorkflow:
         
         driver = logged_in_driver
         
-        # Make sure we're on the recipe search page
-        current_url = driver.current_url.lower()
-        if 'recipe-request' not in current_url:
-            driver.get(f'{self.BASE_URL}/recipe-request')
-            time.sleep(3)
         
         print("Performing recipe search...")
         
@@ -492,13 +483,7 @@ class TestRecipeInteractionWorkflow:
         
         driver = logged_in_driver
         
-        # We should already be on recipe-results page from previous test
-        current_url = driver.current_url.lower()
-        
-        if 'recipe-results' not in current_url:
-            print("⚠ Not on recipe results page, navigating...")
-            driver.get(f'{self.BASE_URL}/recipe-results')
-            time.sleep(3)
+
         
         # Look for recipe elements
         recipe_selectors = [
@@ -539,14 +524,7 @@ class TestRecipeInteractionWorkflow:
         
         driver = logged_in_driver
         
-        # We should already be on recipe-results page from previous test
-        current_url = driver.current_url.lower()
-        
-        if 'recipe-results' not in current_url:
-            print("⚠ Not on recipe results page, navigating...")
-            driver.get(f'{self.BASE_URL}/recipe-results')
-            time.sleep(3)
-        
+
         # Look for clickable recipe elements
         print("Looking for recipe cards to click...")
         
@@ -613,14 +591,7 @@ class TestRecipeInteractionWorkflow:
         print(f"User: {test_user['email']}")
         
         driver = logged_in_driver
-        
-        # Make sure we're on a recipe detail page
-        current_url = driver.current_url.lower()
-        
-        if '/recipe/' not in current_url:
-            print("⚠ Not on recipe detail page, skipping external link test")
-            assert True
-            return
+
         
         print("Looking for external recipe link...")
         
@@ -724,14 +695,7 @@ class TestRecipeInteractionWorkflow:
         
         driver = logged_in_driver
         
-        # Navigate back to dashboard
-        print("Navigating to dashboard...")
-        driver.get(f'{self.BASE_URL}/dashboard')
-        time.sleep(3)
-        
-        # Verify we're on dashboard
-        current_url = driver.current_url.lower()
-        page_text = driver.page_source
+
         
         if 'dashboard' in current_url or 'Hi,' in page_text:
             print("✅ Successfully returned to dashboard")
