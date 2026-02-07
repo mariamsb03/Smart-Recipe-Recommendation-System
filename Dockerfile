@@ -15,12 +15,14 @@ RUN npm ci
 # Copy frontend source
 COPY frontend/ ./
 
-# Build argument for API URL - DEFAULT to Railway URL
+# Build argument for API URL
 ARG VITE_API_URL=https://flavorfit-production-83c1.up.railway.app/api
+
+# Set environment variable for build
 ENV VITE_API_URL=${VITE_API_URL}
 
-# Build frontend with the API URL
-RUN VITE_API_URL=${VITE_API_URL} npm run build 
+# Build frontend
+RUN npm run build  # ✅ Now VITE_API_URL is available
 
 
 # ============ Stage 2: Backend + Serve Frontend ============
