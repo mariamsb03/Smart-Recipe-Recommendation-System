@@ -3,18 +3,24 @@ FROM node:18-alpine AS frontend-builder
 
 WORKDIR /app/frontend
 
-# Copy frontend files
+# Copy ALL configuration files first
 COPY frontend/package*.json ./
+COPY frontend/package-lock.json ./
+COPY frontend/tsconfig.json ./
+COPY frontend/tsconfig.node.json ./
+COPY frontend/vite.config.ts ./
+
+# Install dependencies
 RUN npm ci
 
-# Copy frontend source
-COPY frontend/ ./
+# Copy the rest of the source code
+COPY frontend/src ./src
+COPY frontend/public ./public
 
-
-# Build argument for API URL
+# Build argument
 ARG VITE_API_URL=https://flavorfit-production-83c1.up.railway.app/api
 
-# ✅ CORRECT: VITE_API_URL= before the URL
+# Build
 RUN VITE_API_URL=${VITE_API_URL} npm run build
 
 
