@@ -7,6 +7,9 @@ on:
   push:
     branches: [ dev, staging, main ]
 
+permissions:
+  contents: read
+
 # ======================================================
 # 1️⃣ PR → dev : Integration tests only
 # ======================================================
@@ -21,6 +24,24 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      # Frontend tests (unit)
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "18"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Frontend - install
+        run: |
+          cd frontend
+          npm ci
+
+      - name: Frontend - tests
+        run: |
+          cd frontend
+          npm run test -- --run
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -31,6 +52,16 @@ jobs:
         run: |
           pip install --upgrade pip
           pip install -r backend/requirements.txt
+      
+      - name: Backend - unit tests
+        env:
+          FLASK_ENV: ${{ secrets.FLASK_ENV }}
+          SECRET_KEY: ${{ secrets.SECRET_KEY }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          MLFLOW_TRACKING_URI: ${{ secrets.MLFLOW_TRACKING_URI }}
+        run: |
+          pytest backend/tests/unit -v
 
       - name: Run integration tests
         env:
@@ -46,18 +77,54 @@ jobs:
 
 # ======================================================
 # 2️⃣ Push → dev : no tests, just validation placeholder
-# ======================================================
+# ======================================================    
   dev-push:
-    name: Dev Branch Push
+    name: Push -> dev (tests)
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/dev'
 
     steps:
-      - name: Dev push acknowledged
-        run: |
-          echo "✅ Code pushed to dev branch"
-          echo "➡️ Open PR to staging when ready"
+      - name: Checkout
+        uses: actions/checkout@v4
 
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "18"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Frontend - install
+        run: |
+          cd frontend
+          npm ci
+
+      - name: Frontend - tests
+        run: |
+          cd frontend
+          npm run test -- --run
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+          cache: pip
+
+      - name: Backend - install
+        run: |
+          pip install -U pip
+          pip install -r backend/requirements.txt
+
+      - name: Backend - unit + integration tests
+        env:
+          FLASK_ENV: ${{ secrets.FLASK_ENV }}
+          SECRET_KEY: ${{ secrets.SECRET_KEY }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          MLFLOW_TRACKING_URI: ${{ secrets.MLFLOW_TRACKING_URI }}
+        run: |
+          pytest backend/tests/unit -v
+          pytest backend/tests/integration -v
 
 # ======================================================
 # 3️⃣ Push → staging : ALL tests
@@ -186,6 +253,7 @@ jobs:
           echo "Running E2E tests against: $E2E_BASE_URL"
           # Run tests with virtual display - FIXED TYPO: --auto-servernum
           xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" python -m pytest backend/tests/e2e -v
+    
 
 # ======================================================
 # 4️⃣ Push → main : Build & push Docker image with sequential versioning
@@ -271,50 +339,13 @@ jobs:
           echo "🔄 Run #: ${{ github.run_number }}"
 
 
-
-# ======================================================
-# 5️⃣ Deploy to Railway (Production) - USING RAILWAY GITHUB ACTION
-# ======================================================
-  deploy-railway:
-    name: Deploy to Railway
-    runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
-    needs: build-and-push-docker
-    environment: production
-
-    steps:
-      - name: Debug - Check Docker image exists
-        run: |
-          echo "Checking if Docker image was built..."
-          echo "Docker image: ${{ secrets.DOCKER_USERNAME }}/flavorfit:v${{ needs.build-and-push-docker.outputs.version }}"
-          echo "From previous job: ${{ needs.build-and-push-docker.result }}"
-          
-      - name: Deploy to Railway using GitHub Action
-        uses: railwayapp/github-actions@v1.2.0
+      # Trigger Railway to pull the updated :production tag
+      - name: Redeploy Railway (production)
+        uses: docker://ghcr.io/railwayapp/cli:latest
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
         with:
-          # Your railway project ID (get from railway.app dashboard)
-          projectId: ${{ secrets.RAILWAY_PROJECT_ID }}
-          # Optional: service ID if you have multiple services
-          serviceId: ${{ secrets.RAILWAY_SERVICE_ID }}
-          # Use the Docker image we just built
-          image: ${{ secrets.DOCKER_USERNAME }}/flavorfit:v${{ needs.build-and-push-docker.outputs.version }}
-          # Optional: timeout in seconds
-          timeout: 300
-          # Optional: wait for deployment to complete
-          wait: true
-
-      - name: Get deployment URL
-        run: |
-          echo "================================================"
-          echo "🚂 Railway Deployment Complete!"
-          echo "================================================"
-          echo "✅ Docker image deployed: ${{ secrets.DOCKER_USERNAME }}/flavorfit:v${{ needs.build-and-push-docker.outputs.version }}"
-          echo "📦 Railway Project ID: ${{ secrets.RAILWAY_PROJECT_ID }}"
-          echo "🔧 Service ID: ${{ secrets.RAILWAY_SERVICE_ID }}"
-          echo ""
-          echo "🌐 Your app should be live shortly!"
-          echo "Check your Railway dashboard for the exact URL."
-          echo "================================================"
+          args: redeploy --service=${{ secrets.RAILWAY_SERVICE_ID_PROD }} --yes
 
 # ======================================================
 # 6️⃣ Pipeline Summary
@@ -326,7 +357,6 @@ jobs:
       - pr-integration-tests
       - staging-tests
       - build-and-push-docker
-      - deploy-railway
     if: always()
 
     steps:
@@ -336,15 +366,5 @@ jobs:
           echo "PR Integration Tests: ${{ needs.pr-integration-tests.result }}"
           echo "Staging Tests:        ${{ needs.staging-tests.result }}"
           echo "Docker Build:         ${{ needs.build-and-push-docker.result }}"
-          echo "Railway Deploy:       ${{ needs.deploy-railway.result }}"
           echo "=================================================="
-          
-          if [[ "${{ needs.build-and-push-docker.result }}" == "failure" ]] || \
-             [[ "${{ needs.deploy-railway.result }}" == "failure" ]]; then
-            echo "❌ Deployment pipeline failed"
-            exit 1
-          elif [[ "${{ needs.build-and-push-docker.result }}" == "success" ]] && \
-               [[ "${{ needs.deploy-railway.result }}" == "success" ]]; then
-            echo "✅ Deployment successful!"
-            echo "🌐 Your app is live!"
           fi
