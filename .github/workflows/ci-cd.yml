@@ -330,7 +330,7 @@ jobs:
           cache-from: type=registry,ref=${{ secrets.DOCKER_USERNAME }}/flavorfit:buildcache
           cache-to: type=registry,ref=${{ secrets.DOCKER_USERNAME }}/flavorfit:buildcache,mode=max
           build-args: |  # ✅ ADD THIS SECTION
-            VITE_API_URL=https://flavorfit-production-83c1.up.railway.app/api
+            VITE_API_URL=${{ vars.VITE_API_URL || secrets.VITE_API_URL }} 
 
       - name: Image info
         run: |
