@@ -14,6 +14,7 @@ import time
 import random
 import string
 from datetime import datetime
+import os
 
 
 @pytest.fixture(scope='module')
@@ -88,7 +89,8 @@ def logged_in_driver(driver, test_user):
 class TestMLPredictionWorkflow:
     """E2E tests for ML prediction and recipe recommendation - all use SAME user"""
     
-    BASE_URL = 'http://localhost:8080'
+
+    BASE_URL = os.getenv('E2E_BASE_URL', 'http://localhost:8080')
     
     def login_user(self, driver, user_data):
         """Login existing user - returns True if successful"""

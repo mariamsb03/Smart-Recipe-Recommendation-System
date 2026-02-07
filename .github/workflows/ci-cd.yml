@@ -62,6 +62,9 @@ jobs:
 # ======================================================
 # 3️⃣ Push → staging : ALL tests
 # ======================================================
+  # ======================================================
+# 3️⃣ Push → staging : ALL tests
+# ======================================================
   staging-tests:
     name: Staging - Full Test Suite
     runs-on: ubuntu-latest
@@ -72,17 +75,62 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # -------- Backend --------
+      # -------- Set up Node.js for frontend --------
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: 'frontend/package-lock.json'
+
+      # -------- Set up Python for backend --------
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.10'
           cache: 'pip'
 
+      # -------- Install dependencies --------
+      - name: Install frontend dependencies
+        run: |
+          cd frontend
+          npm ci
+
       - name: Install backend dependencies
         run: |
-          pip install -r backend/requirements.txt
+          cd backend
+          pip install -r requirements.txt
+          pip install webdriver-manager selenium
 
+      # -------- Start services in background --------
+      - name: Start Backend Server
+        env:
+          FLASK_ENV: ${{ secrets.FLASK_ENV }}
+          SECRET_KEY: ${{ secrets.SECRET_KEY }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          MLFLOW_TRACKING_URI: ${{ secrets.MLFLOW_TRACKING_URI }}
+        run: |
+          cd backend
+          nohup python -m flask run --host=0.0.0.0 --port=5000 > flask.log 2>&1 &
+          echo "✅ Backend started on port 5000"
+          sleep 8
+          echo "Backend logs:"
+          tail -20 flask.log
+          curl -f http://localhost:5000/health || echo "Health check failed, but continuing..."
+
+      - name: Start Frontend Development Server on port 8080
+        run: |
+          cd frontend
+          # Set port to 8080 for Vite
+          echo "VITE_PORT=8080" > .env
+          PORT=8080 nohup npm run dev > react.log 2>&1 &
+          echo "✅ Frontend starting on port 8080..."
+          sleep 25  # Vite needs more time on first build
+          echo "Checking if frontend is up:"
+          curl -s -o /dev/null -w "%{http_code}" http://localhost:8080 || echo "Not ready"
+
+      # -------- Run Backend Tests --------
       - name: Run backend unit tests
         env:
           FLASK_ENV: ${{ secrets.FLASK_ENV }}
@@ -91,7 +139,8 @@ jobs:
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
           MLFLOW_TRACKING_URI: ${{ secrets.MLFLOW_TRACKING_URI }}
         run: |
-          pytest backend/tests/unit -v
+          cd backend
+          pytest tests/unit -v
 
       - name: Run backend integration tests
         env:
@@ -101,29 +150,45 @@ jobs:
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
           MLFLOW_TRACKING_URI: ${{ secrets.MLFLOW_TRACKING_URI }}
         run: |
-          pytest backend/tests/integration -v
+          cd backend
+          pytest tests/integration -v
 
+      # -------- Setup Chrome for E2E Tests --------
       - name: Setup Chrome
         uses: browser-actions/setup-chrome@v1
         with:
           chrome-version: stable
 
-      - name: Setup ChromeDriver
+      - name: Install Xvfb for headless display
         run: |
-          # ChromeDriver is installed automatically with the Chrome action
-          chromedriver --version
+          sudo apt-get update
+          sudo apt-get install -y xvfb
 
-      - name: Run end-to-end tests with Xvfb
+      # -------- Wait for services to be fully ready --------
+      - name: Wait for services to be ready
+        run: |
+          echo "⏳ Waiting for services to be fully ready..."
+          sleep 20
+          echo "Checking services:"
+          echo "Backend (5000):"
+          curl -s -o /dev/null -w "%{http_code}" http://localhost:5000/health || echo "Failed"
+          echo ""
+          echo "Frontend (8080):"  # Changed from 5173 to 8080
+          curl -s -o /dev/null -w "%{http_code}" http://localhost:8080 || echo "Failed"
+
+      # -------- Run E2E Tests --------
+      - name: Run end-to-end tests
         env:
+          E2E_BASE_URL: "http://localhost:8080"  # Match the frontend port
           FLASK_ENV: ${{ secrets.FLASK_ENV }}
           SECRET_KEY: ${{ secrets.SECRET_KEY }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
           MLFLOW_TRACKING_URI: ${{ secrets.MLFLOW_TRACKING_URI }}
         run: |
-          # Run tests with virtual display
+          echo "Running E2E tests against: $E2E_BASE_URL"
+          # Run tests with virtual display - FIXED TYPO: --auto-servernum
           xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" python -m pytest backend/tests/e2e -v
-
 
 # ======================================================
 # 4️⃣ Push → main : Build & push ONE Docker image
