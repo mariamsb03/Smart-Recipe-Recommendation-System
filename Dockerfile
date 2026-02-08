@@ -44,7 +44,7 @@ COPY --from=frontend-builder /app/frontend/dist ./static
 # Environment
 ENV FLASK_ENV=production
 ENV PYTHONUNBUFFERED=1
-ENV PORT=500
+ENV PORT=5000
 
 EXPOSE 5000
 
