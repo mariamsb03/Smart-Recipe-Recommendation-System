@@ -1,4 +1,4 @@
-name: CI/CD Pipeline - Phase 4
+# CI/CD Pipeline - Phase 4
 
 on:
   pull_request:
@@ -326,14 +326,14 @@ jobs:
           echo "next_version=$NEXT_VERSION" >> $GITHUB_OUTPUT
           echo "next_version_string=v$NEXT_VERSION" >> $GITHUB_OUTPUT
 
-      - name: Build and push Docker image with latest tag
+      - name: Build and push Docker image
         uses: docker/build-push-action@v5
         with:
           context: .
           push: true
-          tags: |
+          tags: |  # ✅ Push MULTIPLE tags
             ${{ secrets.DOCKER_USERNAME }}/flavorfit:v${{ steps.version.outputs.next_version }}
-            ${{ secrets.DOCKER_USERNAME }}/flavorfit:latest  # ✅ Critical for auto-deploy
+            ${{ secrets.DOCKER_USERNAME }}/flavorfit:latest  # ✅ CRITICAL: Add latest tag
           cache-from: type=registry,ref=${{ secrets.DOCKER_USERNAME }}/flavorfit:buildcache
           cache-to: type=registry,ref=${{ secrets.DOCKER_USERNAME }}/flavorfit:buildcache,mode=max
           build-args: |
@@ -345,10 +345,17 @@ jobs:
           echo "📦 Image: ${{ secrets.DOCKER_USERNAME }}/flavorfit"
           echo "🏷️  Version tag: v${{ steps.version.outputs.next_version }}"
           echo "🏷️  Latest tag: latest"
-          echo "🚀 Railway will auto-deploy from latest tag"
+          echo "🚀 Railway will deploy latest tag"
+          echo "🔖 SHA: ${{ github.sha }}"
+          echo "🔄 Run #: ${{ github.run_number }}"
 
-      # Only needed if Railway is NOT configured for auto-deploy
-      - name: Redeploy Railway (if not auto-deploy)
+
+      - name: Install Railway CLI
+        run: |
+          curl -fsSL https://railway.app/install.sh | sh
+          echo "$HOME/.railway/bin" >> $GITHUB_PATH
+
+      - name: Redeploy Railway (production)
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
         run: |
