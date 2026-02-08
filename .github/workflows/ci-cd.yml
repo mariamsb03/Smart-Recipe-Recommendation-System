@@ -179,6 +179,9 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
           MLFLOW_TRACKING_URI: ${{ secrets.MLFLOW_TRACKING_URI }}
+          MLFLOW_MODEL_VERSION: ${{ secrets.MLFLOW_MODEL_VERSION }}
+          MLFLOW_EXPERIMENT_NAME: ${{ secrets.MLFLOW_EXPERIMENT_NAME }}
+          MLFLOW_MODEL_NAME: ${{ secrets.MLFLOW_MODEL_NAME }} 
         run: |
           cd backend
           nohup python -m flask run --host=0.0.0.0 --port=5000 > flask.log 2>&1 &
