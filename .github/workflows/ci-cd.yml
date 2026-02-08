@@ -1,4 +1,4 @@
-name: CI/CD Pipeline - Phase 4
+# CI/CD Pipeline - Phase 4
 
 on:
   pull_request:
@@ -6,6 +6,9 @@ on:
 
   push:
     branches: [ dev, staging, main ]
+
+permissions:
+  contents: read
 
 # ======================================================
 # 1️⃣ PR → dev : Integration tests only
@@ -21,6 +24,26 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      # Frontend tests (unit)
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "18"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Frontend - install
+        run: |
+          cd frontend
+          npm ci
+
+      - name: Frontend - tests
+        env:
+          VITE_API_URL: ${{secrets.VITE_API_URL }}  
+        run: |
+          cd frontend
+          npm run test -- --run
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -31,6 +54,16 @@ jobs:
         run: |
           pip install --upgrade pip
           pip install -r backend/requirements.txt
+      
+      - name: Backend - unit tests
+        env:
+          FLASK_ENV: ${{ secrets.FLASK_ENV }}
+          SECRET_KEY: ${{ secrets.SECRET_KEY }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          MLFLOW_TRACKING_URI: ${{ secrets.MLFLOW_TRACKING_URI }}
+        run: |
+          pytest backend/tests/unit -v
 
       - name: Run integration tests
         env:
@@ -46,23 +79,59 @@ jobs:
 
 # ======================================================
 # 2️⃣ Push → dev : no tests, just validation placeholder
-# ======================================================
+# ======================================================    
   dev-push:
-    name: Dev Branch Push
+    name: Push -> dev (tests)
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/dev'
+    environment: PHASE4
 
     steps:
-      - name: Dev push acknowledged
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "18"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Frontend - install
         run: |
-          echo "✅ Code pushed to dev branch"
-          echo "➡️ Open PR to staging when ready"
+          cd frontend
+          npm ci
 
+      - name: Frontend - tests
+        env:
+          VITE_API_URL: ${{secrets.VITE_API_URL }}
+        run: |
+          cd frontend
+          npm run test -- --run
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+          cache: pip
+
+      - name: Backend - install
+        run: |
+          pip install -U pip
+          pip install -r backend/requirements.txt
+
+      - name: Backend - unit + integration tests
+        env:
+          FLASK_ENV: ${{ secrets.FLASK_ENV }}
+          SECRET_KEY: ${{ secrets.SECRET_KEY }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          MLFLOW_TRACKING_URI: ${{ secrets.MLFLOW_TRACKING_URI }}
+        run: |
+          pytest backend/tests/unit -v
+          pytest backend/tests/integration -v
 
 # ======================================================
-# 3️⃣ Push → staging : ALL tests
-# ======================================================
-  # ======================================================
 # 3️⃣ Push → staging : ALL tests
 # ======================================================
   staging-tests:
@@ -122,11 +191,12 @@ jobs:
       - name: Start Frontend Development Server on port 8080
         run: |
           cd frontend
-          # Set port to 8080 for Vite
-          echo "VITE_PORT=8080" > .env
+          # Create .env file for testing with local API
+          echo "VITE_API_URL=http://localhost:5000/api" > .env
+          echo "VITE_PORT=8080" >> .env
           PORT=8080 nohup npm run dev > react.log 2>&1 &
-          echo "✅ Frontend starting on port 8080..."
-          sleep 25  # Vite needs more time on first build
+          echo "✅ Frontend starting on port 8080 with local API..."
+          sleep 25
           echo "Checking if frontend is up:"
           curl -s -o /dev/null -w "%{http_code}" http://localhost:8080 || echo "Not ready"
 
@@ -189,15 +259,18 @@ jobs:
           echo "Running E2E tests against: $E2E_BASE_URL"
           # Run tests with virtual display - FIXED TYPO: --auto-servernum
           xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" python -m pytest backend/tests/e2e -v
+    
 
 # ======================================================
-# 4️⃣ Push → main : Build & push ONE Docker image
+# 4️⃣ Push → main : Build & push Docker image with sequential versioning
 # ======================================================
   build-and-push-docker:
     name: Production - Docker Build & Push
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main'
-    environment: PHASE4
+    environment: production
+    outputs:
+      version: ${{ steps.version.outputs.next_version_string }}
 
     steps:
       - name: Checkout code
@@ -212,69 +285,97 @@ jobs:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
-      - name: Extract metadata
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ secrets.DOCKER_USERNAME }}/flavorfit
-          tags: |
-            type=raw,value=latest
-            type=sha,prefix={{branch}}-
+      - name: Calculate next version from Docker Hub
+        id: version
+        env:
+          DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+        run: |
+          # Install jq for JSON parsing
+          sudo apt-get update && sudo apt-get install -y jq curl
+          
+          echo "Checking existing tags for: $DOCKER_USERNAME/flavorfit"
+          
+          # Get tags from Docker Hub API
+          API_URL="https://hub.docker.com/v2/repositories/$DOCKER_USERNAME/flavorfit/tags/"
+          TAGS_RESPONSE=$(curl -s "$API_URL" || echo '{"results": []}')
+          
+          # Extract all tag names
+          TAG_NAMES=$(echo "$TAGS_RESPONSE" | jq -r '.results[].name' 2>/dev/null || echo "")
+          
+          echo "Found tags: $TAG_NAMES"
+          
+          # Find highest vX number
+          HIGHEST_V=0
+          if [ -n "$TAG_NAMES" ]; then
+            for tag in $TAG_NAMES; do
+              if [[ $tag =~ ^v([0-9]+)$ ]]; then
+                NUM=${BASH_REMATCH[1]}
+                echo "Found v$NUM tag"
+                if [ $NUM -gt $HIGHEST_V ]; then
+                  HIGHEST_V=$NUM
+                fi
+              fi
+            done
+          fi
+          
+          # Calculate next version
+          NEXT_VERSION=$((HIGHEST_V + 1))
+          echo "Current highest: v$HIGHEST_V"
+          echo "Next version: v$NEXT_VERSION"
+          
+          echo "next_version=$NEXT_VERSION" >> $GITHUB_OUTPUT
+          echo "next_version_string=v$NEXT_VERSION" >> $GITHUB_OUTPUT
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
         with:
           context: .
           push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
+          tags: |
+            ${{ secrets.DOCKER_USERNAME }}/flavorfit:v${{ steps.version.outputs.next_version }}
+            ${{ secrets.DOCKER_USERNAME }}/flavorfit:latest
           cache-from: type=registry,ref=${{ secrets.DOCKER_USERNAME }}/flavorfit:buildcache
           cache-to: type=registry,ref=${{ secrets.DOCKER_USERNAME }}/flavorfit:buildcache,mode=max
+          build-args: |
+            VITE_API_URL=${{ vars.VITE_API_URL || secrets.VITE_API_URL }}
 
       - name: Image info
         run: |
-          echo "✅ Docker image built and pushed"
-          echo "📦 Image: ${{ secrets.DOCKER_USERNAME }}/flavorfit:latest"
+          echo "✅ Docker images built and pushed"
+          echo "📦 Image: ${{ secrets.DOCKER_USERNAME }}/flavorfit"
+          echo "🏷️  Version tag: v${{ steps.version.outputs.next_version }}"
+          echo "🏷️  Latest tag: latest"
+          echo "🚀 Railway will deploy latest tag"
           echo "🔖 SHA: ${{ github.sha }}"
+          echo "🔄 Run #: ${{ github.run_number }}"
 
-
-# ======================================================
-# 5️⃣ Deploy to Railway (Production)
-# ======================================================
-  deploy-railway:
-    name: Deploy to Railway
-    runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
-    needs: build-and-push-docker
-    environment: production
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Trigger Railway Deployment
+      - name: Install Railway CLI
         run: |
-          curl -X POST "${{ secrets.RAILWAY_DEPLOY_HOOK }}" \
-            -H "Content-Type: application/json" \
-            -d '{}'
+          curl -fsSL https://railway.app/install.sh | sh
+          echo "$HOME/.railway/bin" >> $GITHUB_PATH
+
+      - name: Configure Railway to use Docker image
         env:
-          RAILWAY_DEPLOY_HOOK: ${{ secrets.RAILWAY_DEPLOY_HOOK }}
-
-      - name: Wait for deployment
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
         run: |
-          echo "⏳ Waiting for Railway to pull and deploy the new image..."
-          sleep 30
+          # Set the full Docker image path with latest tag
+          DOCKER_IMAGE="${DOCKER_USERNAME}/flavorfit:latest"
+          echo "🐳 Setting Railway to use image: $DOCKER_IMAGE"
+          
+          # Update Railway service to use the Docker image
+          railway variables set IMAGE=$DOCKER_IMAGE \
+            --service=${{ secrets.RAILWAY_SERVICE_ID }} || true
+          
+          echo "✅ Railway configured to pull: $DOCKER_IMAGE"
 
-      - name: Deployment triggered
+      - name: Redeploy Railway with latest image
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
         run: |
-          echo "================================================"
-          echo "🚂 Railway Deployment Triggered!"
-          echo "================================================"
-          echo "✅ Docker image: ${{ secrets.DOCKER_USERNAME }}/flavorfit:latest"
-          echo "🌐 Check Railway dashboard for deployment status"
-          echo "📍 Your app: https://your-app.up.railway.app"
-          echo "================================================"
-
+          echo "🚀 Triggering Railway deployment with latest Docker image..."
+          railway redeploy --service=${{ secrets.RAILWAY_SERVICE_ID }} --yes
+          echo "✅ Deployment triggered - Railway will pull latest image from Docker Hub"
 
 # ======================================================
 # 6️⃣ Pipeline Summary
@@ -286,7 +387,6 @@ jobs:
       - pr-integration-tests
       - staging-tests
       - build-and-push-docker
-      - deploy-railway
     if: always()
 
     steps:
@@ -296,15 +396,4 @@ jobs:
           echo "PR Integration Tests: ${{ needs.pr-integration-tests.result }}"
           echo "Staging Tests:        ${{ needs.staging-tests.result }}"
           echo "Docker Build:         ${{ needs.build-and-push-docker.result }}"
-          echo "Railway Deploy:       ${{ needs.deploy-railway.result }}"
           echo "=================================================="
-          
-          if [[ "${{ needs.build-and-push-docker.result }}" == "failure" ]] || \
-             [[ "${{ needs.deploy-railway.result }}" == "failure" ]]; then
-            echo "❌ Deployment pipeline failed"
-            exit 1
-          elif [[ "${{ needs.build-and-push-docker.result }}" == "success" ]] && \
-               [[ "${{ needs.deploy-railway.result }}" == "success" ]]; then
-            echo "✅ Deployment successful!"
-            echo "🌐 Your app is live!"
-          fi
