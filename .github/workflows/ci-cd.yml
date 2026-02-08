@@ -331,7 +331,7 @@ jobs:
         with:
           context: .
           push: true
-          tags: |  # ✅ PUSH BOTH TAGS
+          tags: |
             ${{ secrets.DOCKER_USERNAME }}/flavorfit:v${{ steps.version.outputs.next_version }}
             ${{ secrets.DOCKER_USERNAME }}/flavorfit:latest
           cache-from: type=registry,ref=${{ secrets.DOCKER_USERNAME }}/flavorfit:buildcache
@@ -354,20 +354,29 @@ jobs:
           curl -fsSL https://railway.app/install.sh | sh
           echo "$HOME/.railway/bin" >> $GITHUB_PATH
 
-      # Optional: Only needed if Railway doesn't auto-deploy
-      - name: Update Railway to use latest image
+      - name: Configure Railway to use Docker image
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
         run: |
-          # Set DOCKER_IMAGE_TAG to latest
-          railway variables set DOCKER_IMAGE_TAG=latest \
-            --service=${{ secrets.RAILWAY_SERVICE_ID }} || echo "Variable set or already exists"
+          # Set the full Docker image path with latest tag
+          DOCKER_IMAGE="${DOCKER_USERNAME}/flavorfit:latest"
+          echo "🐳 Setting Railway to use image: $DOCKER_IMAGE"
+          
+          # Update Railway service to use the Docker image
+          railway variables set IMAGE=$DOCKER_IMAGE \
+            --service=${{ secrets.RAILWAY_SERVICE_ID }} || true
+          
+          echo "✅ Railway configured to pull: $DOCKER_IMAGE"
 
-      - name: Redeploy Railway (production)
+      - name: Redeploy Railway with latest image
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
         run: |
+          echo "🚀 Triggering Railway deployment with latest Docker image..."
           railway redeploy --service=${{ secrets.RAILWAY_SERVICE_ID }} --yes
+          echo "✅ Deployment triggered - Railway will pull latest image from Docker Hub"
+
 # ======================================================
 # 6️⃣ Pipeline Summary
 # ======================================================
