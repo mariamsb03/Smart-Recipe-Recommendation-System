@@ -3,15 +3,14 @@ FROM node:18-alpine AS frontend-builder
 
 WORKDIR /app/frontend
 
-# Copy ALL configuration files first
-COPY frontend/ ./
+# Copy package files first for better caching
+COPY frontend/package*.json ./
 
 # Install dependencies
 RUN npm ci
 
 # Copy the rest of the source code
-COPY frontend/src ./src
-COPY frontend/public ./public
+COPY frontend/ ./
 
 # Build argument
 ARG VITE_API_URL=https://flavorfit-production-83c1.up.railway.app/api
@@ -35,10 +34,18 @@ RUN apt-get update && apt-get install -y \
 COPY backend/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY backend/ ./backend/
+# Copy backend code
+COPY backend/ .
 
-# Copy the Flask app file as app.py to root
-COPY backend/app.py ./app.py  
+# Create a root-level app.py that imports from backend
+RUN echo 'import sys\n\
+sys.path.insert(0, "/app")\n\
+from backend.app import app\n\
+if __name__ == "__main__":\n\
+    app.run(host="0.0.0.0", port=5000)' > /app/app.py
+
+# Also create a proper __init__.py in backend
+RUN touch /app/backend/__init__.py
 
 # Frontend build
 COPY --from=frontend-builder /app/frontend/dist ./static
@@ -47,11 +54,12 @@ COPY --from=frontend-builder /app/frontend/dist ./static
 ENV FLASK_ENV=production
 ENV PYTHONUNBUFFERED=1
 ENV PORT=5000
+ENV PYTHONPATH=/app
 
 EXPOSE 5000
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
-  CMD curl -f http://localhost:${PORT}/api/health || exit 1
+  CMD curl -f http://localhost:5000/api/health || exit 1
 
-# Use JSON array format
-CMD ["sh", "-c", "exec gunicorn --bind 0.0.0.0:\"${PORT}\" --workers 2 --threads 2 --timeout 120 app:app"]
+# Use gunicorn directly
+CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "2", "--timeout", "120", "app:app"]
