@@ -1,4 +1,4 @@
-name: CI/CD Pipeline - Phase 4
+# CI/CD Pipeline - Phase 4
 
 on:
   pull_request:
@@ -38,6 +38,8 @@ jobs:
           npm ci
 
       - name: Frontend - tests
+        env:
+          VITE_API_URL: ${{secrets.VITE_API_URL }}  
         run: |
           cd frontend
           npm run test -- --run
@@ -82,6 +84,7 @@ jobs:
     name: Push -> dev (tests)
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/dev'
+    environment: PHASE4
 
     steps:
       - name: Checkout
@@ -100,6 +103,8 @@ jobs:
           npm ci
 
       - name: Frontend - tests
+        env:
+          VITE_API_URL: ${{secrets.VITE_API_URL }}
         run: |
           cd frontend
           npm run test -- --run
@@ -186,11 +191,12 @@ jobs:
       - name: Start Frontend Development Server on port 8080
         run: |
           cd frontend
-          # Set port to 8080 for Vite
-          echo "VITE_PORT=8080" > .env
+          # Create .env file for testing with local API
+          echo "VITE_API_URL=http://localhost:5000/api" > .env
+          echo "VITE_PORT=8080" >> .env
           PORT=8080 nohup npm run dev > react.log 2>&1 &
-          echo "✅ Frontend starting on port 8080..."
-          sleep 25  # Vite needs more time on first build
+          echo "✅ Frontend starting on port 8080 with local API..."
+          sleep 25
           echo "Checking if frontend is up:"
           curl -s -o /dev/null -w "%{http_code}" http://localhost:8080 || echo "Not ready"
 
@@ -325,27 +331,51 @@ jobs:
         with:
           context: .
           push: true
-          tags: ${{ secrets.DOCKER_USERNAME }}/flavorfit:v${{ steps.version.outputs.next_version }}
+          tags: |
+            ${{ secrets.DOCKER_USERNAME }}/flavorfit:v${{ steps.version.outputs.next_version }}
+            ${{ secrets.DOCKER_USERNAME }}/flavorfit:latest
           cache-from: type=registry,ref=${{ secrets.DOCKER_USERNAME }}/flavorfit:buildcache
           cache-to: type=registry,ref=${{ secrets.DOCKER_USERNAME }}/flavorfit:buildcache,mode=max
+          build-args: |
+            VITE_API_URL=${{ vars.VITE_API_URL || secrets.VITE_API_URL }}
 
       - name: Image info
         run: |
-          echo "✅ Docker image built and pushed"
+          echo "✅ Docker images built and pushed"
           echo "📦 Image: ${{ secrets.DOCKER_USERNAME }}/flavorfit"
-          echo "🏷️  Tag: v${{ steps.version.outputs.next_version }}"
-          echo "🔖 Version: v${{ steps.version.outputs.next_version }}"
+          echo "🏷️  Version tag: v${{ steps.version.outputs.next_version }}"
+          echo "🏷️  Latest tag: latest"
+          echo "🚀 Railway will deploy latest tag"
           echo "🔖 SHA: ${{ github.sha }}"
           echo "🔄 Run #: ${{ github.run_number }}"
 
+      - name: Install Railway CLI
+        run: |
+          curl -fsSL https://railway.app/install.sh | sh
+          echo "$HOME/.railway/bin" >> $GITHUB_PATH
 
-      # Trigger Railway to pull the updated :production tag
-      - name: Redeploy Railway (production)
-        uses: docker://ghcr.io/railwayapp/cli:latest
+      - name: Configure Railway to use Docker image
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
-        with:
-          args: redeploy --service=${{ secrets.RAILWAY_SERVICE_ID_PROD }} --yes
+          DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+        run: |
+          # Set the full Docker image path with latest tag
+          DOCKER_IMAGE="${DOCKER_USERNAME}/flavorfit:latest"
+          echo "🐳 Setting Railway to use image: $DOCKER_IMAGE"
+          
+          # Update Railway service to use the Docker image
+          railway variables set IMAGE=$DOCKER_IMAGE \
+            --service=${{ secrets.RAILWAY_SERVICE_ID }} || true
+          
+          echo "✅ Railway configured to pull: $DOCKER_IMAGE"
+
+      - name: Redeploy Railway with latest image
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+        run: |
+          echo "🚀 Triggering Railway deployment with latest Docker image..."
+          railway redeploy --service=${{ secrets.RAILWAY_SERVICE_ID }} --yes
+          echo "✅ Deployment triggered - Railway will pull latest image from Docker Hub"
 
 # ======================================================
 # 6️⃣ Pipeline Summary
