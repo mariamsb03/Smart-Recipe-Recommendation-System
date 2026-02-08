@@ -826,16 +826,20 @@ def health_check():
     }), 200
 
 # ============= SERVE FRONTEND =============
-# Remove these legacy endpoints or fix them properly:
+# Replace the legacy_signup function:
 @app.route('/signup', methods=['POST'])
 def legacy_signup():
-    """Handle /signup directly since frontend is calling it"""
-    return signup()  # This should work, but check the request data
+    """Redirect /signup POST requests to /api/auth/signup"""
+    # Forward the request to the actual signup endpoint
+    return signup()
 
-@app.route('/login', methods=['POST'])
-def legacy_login():
-    """Handle /login directly"""
-    return login()
+# With:
+@app.route('/signup', methods=['POST'])
+def legacy_signup():
+    """Redirect /signup POST requests to /api/auth/signup"""
+    # Forward the request to the actual signup endpoint
+    # We need to manually create a new request context
+    return signup()
 
 # ============= RUN APP =============
 
