@@ -326,40 +326,33 @@ jobs:
           echo "next_version=$NEXT_VERSION" >> $GITHUB_OUTPUT
           echo "next_version_string=v$NEXT_VERSION" >> $GITHUB_OUTPUT
 
-      - name: Build and push Docker image with single tag
+      - name: Build and push Docker image with latest tag
         uses: docker/build-push-action@v5
         with:
           context: .
           push: true
-          tags: ${{ secrets.DOCKER_USERNAME }}/flavorfit:v${{ steps.version.outputs.next_version }}
+          tags: |
+            ${{ secrets.DOCKER_USERNAME }}/flavorfit:v${{ steps.version.outputs.next_version }}
+            ${{ secrets.DOCKER_USERNAME }}/flavorfit:latest  # ✅ Critical for auto-deploy
           cache-from: type=registry,ref=${{ secrets.DOCKER_USERNAME }}/flavorfit:buildcache
           cache-to: type=registry,ref=${{ secrets.DOCKER_USERNAME }}/flavorfit:buildcache,mode=max
-          build-args: |  # ✅ ADD THIS SECTION
-            VITE_API_URL=${{ vars.VITE_API_URL || secrets.VITE_API_URL }} 
+          build-args: |
+            VITE_API_URL=${{ vars.VITE_API_URL || secrets.VITE_API_URL }}
 
       - name: Image info
         run: |
-          echo "✅ Docker image built and pushed"
+          echo "✅ Docker images built and pushed"
           echo "📦 Image: ${{ secrets.DOCKER_USERNAME }}/flavorfit"
-          echo "🏷️  Tag: v${{ steps.version.outputs.next_version }}"
-          echo "🔖 Version: v${{ steps.version.outputs.next_version }}"
-          echo "🔖 SHA: ${{ github.sha }}"
-          echo "🔄 Run #: ${{ github.run_number }}"
+          echo "🏷️  Version tag: v${{ steps.version.outputs.next_version }}"
+          echo "🏷️  Latest tag: latest"
+          echo "🚀 Railway will auto-deploy from latest tag"
 
-
-      - name: Install Railway CLI
-        run: |
-          curl -fsSL https://railway.app/install.sh | sh
-          echo "$HOME/.railway/bin" >> $GITHUB_PATH
-
-      - name: Redeploy Railway (production)
+      # Only needed if Railway is NOT configured for auto-deploy
+      - name: Redeploy Railway (if not auto-deploy)
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
         run: |
-          # Deploy the specific version we just built
-          railway redeploy --service=${{ secrets.RAILWAY_SERVICE_ID }} \
-            --image=${{ secrets.DOCKER_USERNAME }}/flavorfit:v${{ steps.version.outputs.next_version }} \
-            --yes
+          railway redeploy --service=${{ secrets.RAILWAY_SERVICE_ID }} --yes
 # ======================================================
 # 6️⃣ Pipeline Summary
 # ======================================================
