@@ -37,9 +37,6 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY backend/ ./backend/
 
-# Copy model_loader if it exists
-COPY model_loader.py ./
-
 # Copy the Flask app file as app.py to root
 COPY backend/app.py ./app.py  
 
