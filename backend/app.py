@@ -826,19 +826,16 @@ def health_check():
     }), 200
 
 # ============= SERVE FRONTEND =============
-@app.route('/', defaults={'path': ''})
-@app.route('/<path:path>')
-def serve_frontend(path):
-    """Serve the React frontend"""
-    # Skip API routes
-    if path.startswith('api/'):
-        return jsonify({'error': 'Not found'}), 404
-    
-    # Serve static files or index.html
-    if path and os.path.exists(os.path.join(app.static_folder, path)):
-        return send_from_directory(app.static_folder, path)
-    
-    return send_from_directory(app.static_folder, 'index.html')
+# Remove these legacy endpoints or fix them properly:
+@app.route('/signup', methods=['POST'])
+def legacy_signup():
+    """Handle /signup directly since frontend is calling it"""
+    return signup()  # This should work, but check the request data
+
+@app.route('/login', methods=['POST'])
+def legacy_login():
+    """Handle /login directly"""
+    return login()
 
 # ============= RUN APP =============
 
