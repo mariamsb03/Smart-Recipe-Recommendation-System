@@ -331,9 +331,9 @@ jobs:
         with:
           context: .
           push: true
-          tags: |  # ✅ Push MULTIPLE tags
+          tags: |  # ✅ PUSH BOTH TAGS
             ${{ secrets.DOCKER_USERNAME }}/flavorfit:v${{ steps.version.outputs.next_version }}
-            ${{ secrets.DOCKER_USERNAME }}/flavorfit:latest  # ✅ CRITICAL: Add latest tag
+            ${{ secrets.DOCKER_USERNAME }}/flavorfit:latest
           cache-from: type=registry,ref=${{ secrets.DOCKER_USERNAME }}/flavorfit:buildcache
           cache-to: type=registry,ref=${{ secrets.DOCKER_USERNAME }}/flavorfit:buildcache,mode=max
           build-args: |
@@ -349,11 +349,19 @@ jobs:
           echo "🔖 SHA: ${{ github.sha }}"
           echo "🔄 Run #: ${{ github.run_number }}"
 
-
       - name: Install Railway CLI
         run: |
           curl -fsSL https://railway.app/install.sh | sh
           echo "$HOME/.railway/bin" >> $GITHUB_PATH
+
+      # Optional: Only needed if Railway doesn't auto-deploy
+      - name: Update Railway to use latest image
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+        run: |
+          # Set DOCKER_IMAGE_TAG to latest
+          railway variables set DOCKER_IMAGE_TAG=latest \
+            --service=${{ secrets.RAILWAY_SERVICE_ID }} || echo "Variable set or already exists"
 
       - name: Redeploy Railway (production)
         env:
