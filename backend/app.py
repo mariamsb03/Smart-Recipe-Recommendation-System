@@ -826,20 +826,19 @@ def health_check():
     }), 200
 
 # ============= SERVE FRONTEND =============
-# Replace the legacy_signup function:
-@app.route('/signup', methods=['POST'])
-def legacy_signup():
-    """Redirect /signup POST requests to /api/auth/signup"""
-    # Forward the request to the actual signup endpoint
-    return signup()
-
-# With:
-@app.route('/signup', methods=['POST'])
-def legacy_signup():
-    """Redirect /signup POST requests to /api/auth/signup"""
-    # Forward the request to the actual signup endpoint
-    # We need to manually create a new request context
-    return signup()
+@app.route('/', defaults={'path': ''})
+@app.route('/<path:path>')
+def serve_frontend(path):
+    """Serve the React frontend"""
+    # Skip API routes
+    if path.startswith('api/'):
+        return jsonify({'error': 'Not found'}), 404
+    
+    # Serve static files or index.html
+    if path and os.path.exists(os.path.join(app.static_folder, path)):
+        return send_from_directory(app.static_folder, path)
+    
+    return send_from_directory(app.static_folder, 'index.html')
 
 # ============= RUN APP =============
 
